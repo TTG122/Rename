@@ -49,7 +49,8 @@ enum ImportService {
 
         if lowerName.hasSuffix(".xlsx") || isZip {
             let rows = try XLSXReader.rows(from: data)
-            return build(rows: rows, categories: categories, formatName: "Excel 账单")
+            // xlsx 也要认格式：微信导出的账单平台、账户字段都依赖它
+            return build(rows: rows, categories: categories, formatName: detectFormat(rows: rows))
         }
 
         guard let text = decodeText(data) else { throw ImportError.decodeFailed }
@@ -60,14 +61,21 @@ enum ImportService {
     // MARK: - 编码
 
     static func decodeText(_ data: Data) -> String? {
-        if let utf8 = String(data: data, encoding: .utf8) { return utf8 }
+        if let utf8 = String(data: data, encoding: .utf8) {
+            return stripBOM(utf8)
+        }
         let gb18030 = String.Encoding(
             rawValue: CFStringConvertEncodingToNSStringEncoding(
                 CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)
             )
         )
-        if let gbk = String(data: data, encoding: gb18030) { return gbk }
+        if let gbk = String(data: data, encoding: gb18030) { return stripBOM(gbk) }
         return nil
+    }
+
+    /// Excel / 记事本另存的 CSV 常带 BOM，会让第一行第一个单元格多出一个不可见字符
+    private static func stripBOM(_ text: String) -> String {
+        text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
     }
 
     // MARK: - CSV 解析（RFC 4180）
@@ -166,24 +174,44 @@ enum ImportService {
             var map = ColumnMap()
             map.headerIndex = rowIndex
             var score = 0
+            let normalizedRow = row.map { TextNormalizer.normalize($0) }
 
             for entry in keywordSets {
-                for (columnIndex, cell) in row.enumerated() {
-                    let normalized = TextNormalizer.normalize(cell)
-                    guard !normalized.isEmpty else { continue }
-                    let hit = entry.keywords.contains { keyword in
-                        let key = TextNormalizer.normalize(keyword)
-                        return !key.isEmpty && (normalized == key || normalized.contains(key))
-                    }
-                    if hit {
-                        if map[keyPath: entry.keyPath] == nil {
-                            map[keyPath: entry.keyPath] = columnIndex
-                            score += 1
-                        }
+                var matched: Int?
+
+                // 第一轮：表头与关键词完全一致的列优先。
+                // 微信账单里既有「交易类型」又有「收/支」，只按包含匹配的话
+                // 「交易类型」会靠「类型」二字抢走收支列，导致 22 笔收入全被记成支出。
+                for keyword in entry.keywords {
+                    let key = TextNormalizer.normalize(keyword)
+                    guard !key.isEmpty else { continue }
+                    if let column = normalizedRow.firstIndex(of: key) {
+                        matched = column
                         break
                     }
                 }
+
+                // 第二轮：找不到完全一致的，再退化为包含匹配（兼容「金额(元)」「收/支金额」这类写法）
+                if matched == nil {
+                    for (columnIndex, cell) in normalizedRow.enumerated() {
+                        guard !cell.isEmpty else { continue }
+                        let hit = entry.keywords.contains { keyword in
+                            let key = TextNormalizer.normalize(keyword)
+                            return !key.isEmpty && cell.contains(key)
+                        }
+                        if hit {
+                            matched = columnIndex
+                            break
+                        }
+                    }
+                }
+
+                if let column = matched {
+                    map[keyPath: entry.keyPath] = column
+                    score += 1
+                }
             }
+
             map.score = score
             if score >= 3 {
                 if best == nil || score > best!.score {
@@ -215,6 +243,7 @@ enum ImportService {
 
         let dataRows = rows.dropFirst(map.headerIndex + 1)
         var seenKeys = Set<String>()
+        var neutralSkipped = 0
 
         for row in dataRows {
             func value(_ keyPath: WritableKeyPath<ColumnMap, Int?>) -> String {
@@ -228,18 +257,25 @@ enum ImportService {
                 continue
             }
 
-            // 状态过滤：交易关闭 / 已全额退款 这类不计入
-            let status = value(\.status)
-            if status.contains("关闭") || status.contains("失败") || status.contains("已退款") {
-                result.skippedRows += 1
+            // 收支方向：微信账单用「收/支」列，中性交易（充值、提现、零钱通存取、
+            // 信用卡还款）写的是「/」，这类不是真实收支，跳过但单独计数。
+            // 注意这里不能先做占位符清洗，否则「/」会被抹成空字符串，判断就失效了。
+            let kindText = value(\.kind)
+            if kindText == "/" || kindText == "／" || kindText.contains("不计") {
+                neutralSkipped += 1
                 continue
             }
-
-            let kindText = value(\.kind)
             var kind: TransactionKind = .expense
             if kindText.contains("收入") || kindText.contains("收款") || kindText.contains("转入") {
                 kind = .income
-            } else if kindText.contains("不计") {
+            }
+
+            // 状态过滤：只跳过「钱没动」的行。
+            // 「已退款」的行必须保留——微信把退款单独记一笔收入，原支出行也保留，
+            // 两边都导入净额才正确；只留一边会把账做错。
+            let status = cleanCell(value(\.status))
+            let deadStatuses = ["交易关闭", "已关闭", "支付失败", "交易失败", "已撤销", "已取消", "已失效"]
+            if deadStatuses.contains(where: { status.contains($0) }) {
                 result.skippedRows += 1
                 continue
             }
@@ -247,8 +283,8 @@ enum ImportService {
             let dateText = value(\.dateTime)
             let occurredAt = parseDate(dateText) ?? .now
 
-            let merchant = cleanMerchant(value(\.merchant))
-            let item = value(\.item)
+            let merchant = cleanMerchant(cleanCell(value(\.merchant)))
+            let item = cleanCell(value(\.item))
             let providedCategory = value(\.category)
 
             var categoryName = "其他"
@@ -274,19 +310,24 @@ enum ImportService {
             draft.amountCents = cents
             draft.merchant = merchant
             draft.item = item
-            draft.note = value(\.note)
+            draft.note = cleanCell(value(\.note))
             draft.categoryName = categoryName
             draft.categoryID = SeedData.category(named: categoryName, in: categories)?.id
             draft.occurredAt = occurredAt
             draft.platform = detectPlatform(row.joined(separator: " "), format: formatName)
-            draft.account = value(\.account)
+            draft.account = cleanCell(value(\.account))
             draft.orderNumber = value(\.orderNumber)
             draft.source = .fileImport
             draft.confidence = 0.99
             draft.kindIsCertain = true
 
-            // 文件内部去重
-            let key = "\(cents)|\(TextNormalizer.normalize(merchant))|\(Int(occurredAt.timeIntervalSince1970 / 180))"
+            // 文件内部去重：优先用交易单号（唯一），没有单号才退回「金额 + 商户 + 3 分钟窗口」
+            let key: String
+            if !draft.orderNumber.isEmpty {
+                key = "no:\(draft.orderNumber)"
+            } else {
+                key = "\(cents)|\(TextNormalizer.normalize(merchant))|\(Int(occurredAt.timeIntervalSince1970 / 180))"
+            }
             if seenKeys.contains(key) {
                 result.duplicateInFile += 1
                 continue
@@ -296,6 +337,10 @@ enum ImportService {
             result.drafts.append(draft)
         }
 
+        if neutralSkipped > 0 {
+            result.warnings.append("已跳过 \(neutralSkipped) 笔中性交易（充值 / 提现 / 零钱通存取等），不计入收支")
+        }
+
         if result.drafts.isEmpty {
             result.warnings.append("没有解析出任何账单，请检查文件内容")
         }
@@ -303,6 +348,13 @@ enum ImportService {
     }
 
     // MARK: - 字段清洗
+
+    /// 导出文件里的占位符（「/」「-」「—」）不是真实内容
+    private static func cleanCell(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ["/", "-", "—", "--", "无", "N/A", "n/a"].contains(trimmed) { return "" }
+        return trimmed
+    }
 
     private static func cleanAmount(_ text: String) -> String {
         text
@@ -348,6 +400,8 @@ enum ImportService {
     static func parseDate(_ text: String) -> Date? {
         guard !text.isEmpty else { return nil }
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Excel 把日期存成序列号，微信导出的 xlsx 账单时间列就是 46326.778402777774 这种
+        if let serial = excelSerialDate(cleaned) { return serial }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
@@ -365,5 +419,24 @@ enum ImportService {
             }
         }
         return nil
+    }
+
+    /// Excel 日期序列号 → Date。
+    /// 序列号以 1899-12-30 为第 0 天（该基准已包含 1900 年被误当成闰年的修正），
+    /// 小数部分是当天的时间占比。下限 10000（约 1927 年）是为了避开「5」「20」这类
+    /// 被错读成日期列的普通数字；上限覆盖到 9999 年。
+    static func excelSerialDate(_ text: String) -> Date? {
+        guard let serial = Double(text), serial.isFinite, serial >= 10_000, serial <= 2_958_465 else {
+            return nil
+        }
+        let calendar = Calendar(identifier: .gregorian)
+        let wholeDays = Int(serial)
+        var comps = DateComponents()
+        comps.year = 1899
+        comps.month = 12
+        comps.day = 30 + wholeDays
+        guard let dayStart = calendar.date(from: comps) else { return nil }
+        let fraction = serial - Double(wholeDays)
+        return dayStart.addingTimeInterval((fraction * 86_400).rounded())
     }
 }

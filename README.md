@@ -6,7 +6,7 @@
 
 原生技术栈：Swift / SwiftUI / MVVM / SwiftData / Vision / App Intents / App Shortcuts / Share Extension / WidgetKit / Charts / LocalAuthentication。
 
-**当前版本 1.1.2（build 6）**：蓝色账单图标、应用更名「简记」、全局主色由绿改蓝；识别器修复了「交易单号尾数当金额」「余额当金额」「退款判成支出」「商户取到乱码」「一屏两笔时金额与方向来自不同笔」「到账页时间取错」「广告文案里的『5元』当金额」「订单金额/还款金额盖过实付」「收款账户被当成收入信号」「商户名带『简称』前缀」十类错误。
+**当前版本 1.1.3（build 7）**：蓝色账单图标、应用更名「简记」、全局主色由绿改蓝；截图识别修复 16 类错误（单号尾数、余额、退款方向、乱码商户、一屏两笔、到账时间、广告文案金额、订单/还款金额盖过实付、收款账户误判收入、商户名带字段前缀等）；账单导入修复微信 xlsx 的四类问题（Excel 序列号时间全部丢失、「收/支」列被「交易类型」抢占、中性交易被记成支出、退款行被整体丢弃）。
 
 ---
 
@@ -288,6 +288,7 @@ Models (SwiftData)         Transaction / Category / MerchantRule / Budget
 - **调分类阈值**：`RuleBasedClassifier` 里 `0.55 + best.score * 0.12`，或设置页的「自动记账置信度」滑杆。
 - **换配色**：`Design/Theme.swift` 里的语义色，深浅色都在一处。
 - **改图标**：改 `tools/make_icon.py` 里的坐标/颜色后重跑，或直接替换 `AppIcon-1024.png`（1024×1024，不带透明通道）。
+- **导入规则自测**：`python tools/verify_import.py [账单.xlsx]` —— 把 `ImportService` 的列识别、金额/方向/时间解析用 Python 等价实现跑一遍，带上真实账单时会核对「笔数 / 收入 / 支出」是否与账单首页自报的数字一致。
 - **改主色**：`Design/Theme.swift` 里的 `brand`（主色）和 `brandSoft`（淡底），再加上 `Assets.xcassets/AccentColor` 一处，改完整个 App 的强调色都跟着变；`income` / `expense` 是语义色（收入绿 / 支出橙红），不建议跟着换。
 
 ---

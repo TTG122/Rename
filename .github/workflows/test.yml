@@ -26,7 +26,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run verifier
-        run: python tools/verify_parser.py
+        run: |
+          python tools/verify_parser.py
+          python tools/verify_import.py
 
   xctest:
     name: XCTest（真机同款 Swift 代码）
