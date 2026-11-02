@@ -1,0 +1,120 @@
+# XcodeGen 配置（备用方案）
+#
+# 仓库里已经带了可以直开的 QingDianJiZhang.xcodeproj。
+# 如果你想用 XcodeGen 重新生成工程（例如加文件后想自动同步），执行：
+#
+#   brew install xcodegen
+#   cd 简记
+#   xcodegen generate
+#
+# 注意：生成会覆盖 QingDianJiZhang.xcodeproj，请先备份自定义改动。
+
+name: QingDianJiZhang
+options:
+  bundleIdPrefix: com.qingdianjizhang
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_LANGUAGE: zh-Hans
+
+targets:
+  # ---------------------------------------------------------------- 主 App
+  QingDianJiZhang:
+    type: application
+    platform: iOS
+    sources:
+      - path: QingDianJiZhang
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qingdianjizhang.app
+        INFOPLIST_FILE: Config/App-Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Config/App.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+    dependencies:
+      - target: QingDianJiZhangShare
+        embed: true
+      - target: QingDianJiZhangWidget
+        embed: true
+
+  # ------------------------------------------------------------ 分享扩展
+  QingDianJiZhangShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: QingDianJiZhangShare
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qingdianjizhang.app.share
+        INFOPLIST_FILE: Config/Share-Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Config/Share.entitlements
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  # ------------------------------------------------------------ 桌面小组件
+  QingDianJiZhangWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: QingDianJiZhangWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qingdianjizhang.app.widget
+        INFOPLIST_FILE: Config/Widget-Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Config/Widget.entitlements
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  # ---------------------------------------------------------------- 测试
+  QingDianJiZhangTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: QingDianJiZhangTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.qingdianjizhang.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: QingDianJiZhang
+
+schemes:
+  QingDianJiZhang:
+    build:
+      targets:
+        QingDianJiZhang: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - QingDianJiZhangTests
+    archive:
+      config: Release
+
+  # 自签专用方案：不签名、不嵌扩展，产出可以直接丢给 Sideloadly / ESign 的 IPA
+  QingDianJiZhang-Sideload:
+    build:
+      targets:
+        QingDianJiZhang: all
+    run:
+      config: Debug
+    archive:
+      config: Release

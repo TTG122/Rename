@@ -1,0 +1,89 @@
+name: Build IPA
+
+# 用 GitHub 免费的 macOS 机器帮你把 IPA 编出来（不需要自己有 Mac）。
+#
+# 用法：
+#   1. 把这个目录推到你的 GitHub 仓库
+#   2. Actions → Build IPA → Run workflow
+#   3. 跑完后在本次运行的 Artifacts 里下载 轻点记账-sideload.ipa
+#
+# 说明：
+#   · 产出的是「未签名 + 已剥离扩展」的自签版 IPA，配合 Sideloadly / AltStore 用
+#   · 公开仓库免费；私有仓库 macOS 分钟数也够用（一次构建约 2-4 分钟）
+#   · 这里不做签名：签名需要你的开发者证书和描述文件，不应该放在仓库里
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: "构建版本：sideload（自签，推荐）或 full（含扩展，需自己签名）"
+        required: true
+        default: sideload
+        type: choice
+        options:
+          - sideload
+          - full
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build iOS IPA
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Make scripts executable
+        run: chmod +x tools/*.sh
+
+      - name: Build sideload IPA
+        if: ${{ github.event.inputs.flavor != 'full' }}
+        run: ./tools/build-ipa-sideload.sh
+
+      - name: Build full IPA (extensions included, unsigned)
+        if: ${{ github.event.inputs.flavor == 'full' }}
+        run: ./tools/build-ipa.sh
+
+      - name: List products
+        run: ls -lh build/ || true
+
+      - name: Upload sideload IPA
+        if: ${{ github.event.inputs.flavor != 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qingdian-sideload-ipa
+          path: build/轻点记账-sideload.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload full IPA
+        if: ${{ github.event.inputs.flavor == 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qingdian-full-ipa
+          path: build/轻点记账-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/
+          if-no-files-found: ignore
+          retention-days: 7

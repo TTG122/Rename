@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_CN</string>
+	<key>CFBundleDisplayName</key>
+	<string>轻点记账</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.qingdianjizhang.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>qingdianjizhang</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要读取相册里的支付截图，用于识别金额和商户。图片只在你手机上处理，不会上传。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>可以把月报长图和账单截图保存到相册。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>用相机拍摄购物小票，识别金额和商户。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>语音记账需要麦克风，例如说「今天中午吃饭28元」。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>把你说的话转成文字来记账。优先在设备端完成，不联网。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>用 Face ID 保护你的账单，只有你能打开轻点记账。</string>
+</dict>
+</plist>
