@@ -1,6 +1,6 @@
 //
 //  ModelContainerProvider.swift
-//  轻点记账
+//  简记
 //
 
 import Foundation
@@ -43,7 +43,7 @@ enum ModelContainerProvider {
                 return container
             }
             #if DEBUG
-            print("[轻点记账] CloudKit 容器不可用（多半是没在 Xcode 里开启 iCloud Capability），回落到本地库")
+            print("[简记] CloudKit 容器不可用（多半是没在 Xcode 里开启 iCloud Capability），回落到本地库")
             #endif
         }
 
@@ -60,7 +60,7 @@ enum ModelContainerProvider {
 
         // 3. 最后兜底：内存库。宁可这次不持久化，也不要启动即崩溃。
         #if DEBUG
-        print("[轻点记账] 本地库创建失败，降级为内存库")
+        print("[简记] 本地库创建失败，降级为内存库")
         #endif
         let memoryConfig = ModelConfiguration(schema: AppSchema.schema, isStoredInMemoryOnly: true)
         do {

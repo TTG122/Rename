@@ -1,6 +1,6 @@
 //
 //  SnapshotWriter.swift
-//  轻点记账
+//  简记
 //
 //  给 WidgetKit 用的轻量快照。Widget 进程不直接打开 SwiftData 主库，
 //  只读这个 JSON —— 快、稳、不会因为 schema 变化导致小组件崩溃。

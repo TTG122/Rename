@@ -1,6 +1,6 @@
 //
 //  CategoryClassifier.swift
-//  轻点记账
+//  简记
 //
 //  三级分类策略，按优先级：
 //  1. 用户历史规则（MerchantRule）：用户改过一次，以后就记住 —— 置信度 0.97
@@ -110,6 +110,14 @@ struct RuleBasedClassifier: CategoryClassifying {
 
         // 4. 兜底
         if input.kind == .income {
+            // 退款不是工资，归到「其他」比「工资收入」更贴近事实
+            if input.rawText.contains("退款") || input.rawText.contains("退货") {
+                return ClassificationResult(
+                    categoryName: resolved("其他", for: input),
+                    confidence: 0.35,
+                    reason: "退款不属于工资收入，先归入其他"
+                )
+            }
             return ClassificationResult(
                 categoryName: resolved("工资收入", for: input),
                 confidence: 0.3,

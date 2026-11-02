@@ -1,6 +1,6 @@
 //
 //  QingDianJiZhangApp.swift
-//  轻点记账
+//  简记
 //
 //  App 入口。SwiftData 容器在这里注入，路由与设置以 Environment 下发。
 //

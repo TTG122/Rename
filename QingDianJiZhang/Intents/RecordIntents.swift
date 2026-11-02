@@ -1,8 +1,8 @@
 //
 //  RecordIntents.swift
-//  轻点记账
+//  简记
 //
-//  App Intents：快捷指令「轻点记账」的落点。
+//  App Intents：快捷指令「简记」的落点。
 //  双击背面 → 运行快捷指令 → 把截图传进来 → 识别 → 打开确认面板。
 //
 //  说明：iOS 不允许 App Intent 在其他 App 之上直接弹出自定义 UI，
@@ -19,7 +19,7 @@ import UIKit
 
 struct RecordFromImageIntent: AppIntent {
     static var title: LocalizedStringResource = "识别并记账"
-    static var description: IntentDescription = IntentDescription("把支付截图交给轻点记账，自动识别金额、商户和分类。")
+    static var description: IntentDescription = IntentDescription("把支付截图交给简记，自动识别金额、商户和分类。")
 
     /// 需要 App 在前台才能显示确认面板
     static var openAppWhenRun: Bool = true
@@ -65,7 +65,7 @@ struct RecordFromImageIntent: AppIntent {
             AppToast(title: "没收到截图", subtitle: "在快捷指令里加一步「获取图像」", symbol: "photo.badge.exclamationmark", tint: .orange),
             autoDismissAfter: 3
         )
-        return .result(dialog: "没有收到截图，已为你打开轻点记账。")
+        return .result(dialog: "没有收到截图，已为你打开简记。")
     }
 
     @MainActor
@@ -122,7 +122,7 @@ struct QuickTextRecordIntent: AppIntent {
 // MARK: - 打开 App 准备记账
 
 struct OpenQuickRecordIntent: AppIntent {
-    static var title: LocalizedStringResource = "打开轻点记账"
+    static var title: LocalizedStringResource = "打开简记"
     static var description: IntentDescription = IntentDescription("打开 App 并停在记账入口。")
     static var openAppWhenRun: Bool = true
 

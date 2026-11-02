@@ -95,7 +95,7 @@ PAYLOAD="${BUILD_DIR}/Payload"
 rm -rf "$PAYLOAD"
 mkdir -p "$PAYLOAD"
 cp -R "$APP_PATH" "$PAYLOAD/"
-(cd "$BUILD_DIR" && zip -qry "轻点记账-unsigned.ipa" Payload)
+(cd "$BUILD_DIR" && zip -qry "简记-unsigned.ipa" Payload)
 
-echo "==> 完成：${BUILD_DIR}/轻点记账-unsigned.ipa"
+echo "==> 完成：${BUILD_DIR}/简记-unsigned.ipa"
 echo "    下一步：用 Sideloadly / AltStore / ESign 导入这个 IPA，用自己的 Apple ID 签名。"

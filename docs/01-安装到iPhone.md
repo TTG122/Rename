@@ -53,7 +53,7 @@
 ```bash
 chmod +x tools/*.sh
 ./tools/build-ipa-sideload.sh
-# → build/轻点记账-sideload.ipa
+# → build/简记-sideload.ipa
 ```
 
 这个包已经做了三件事，专为自签准备：
@@ -65,7 +65,7 @@ chmod +x tools/*.sh
 
 1. 下载 <https://sideloadly.io>（Windows 版直接 exe）
 2. iPhone 连电脑，打开 Sideloadly
-3. `IPA File` 选 `轻点记账-sideload.ipa`
+3. `IPA File` 选 `简记-sideload.ipa`
 4. `Apple ID` 填你的 Apple ID（会用来生成免费描述文件，只在本机使用，不会上传到第三方）
 5. 点 `Start`，输入 Apple ID 密码（如果开了双重认证，需要在 appleid.apple.com 生成一个**App 专用密码**填进去）
 6. 装完后，iPhone → 设置 → 通用 → VPN 与设备管理 → 信任你的 Apple ID
@@ -112,8 +112,8 @@ TrollStore 利用 CoreTrust 漏洞，可以实现永久签名不expire。仅支�
 | `The application-identifier entitlement does not match` | 扩展和主 App 的 Bundle ID 前缀不一致 | 统一改成 `xxx.qingdianjizhang` / `.share` / `.widget` |
 | `Untrusted Developer` | 没信任证书 | 设置 → 通用 → VPN 与设备管理 → 信任 |
 | 装完打不开、闪退 | 描述文件过期 / 证书被吊销 | 重新签一次 |
-| `Unable to install "轻点记账"` | 设备 iOS 低于 17.0 | 工程最低支持 iOS 17（SwiftData 要求），或把 `IPHONEOS_DEPLOYMENT_TARGET` 提到你设备的版本以上再编译 |
-| 双击背面没反应 | 快捷指令没绑到「轻点两下」 | 设置 → 辅助功能 → 触控 → 轻点背面 → 轻点两下 → 选「轻点记账」 |
+| `Unable to install "简记"` | 设备 iOS 低于 17.0 | 工程最低支持 iOS 17（SwiftData 要求），或把 `IPHONEOS_DEPLOYMENT_TARGET` 提到你设备的版本以上再编译 |
+| 双击背面没反应 | 快捷指令没绑到「轻点两下」 | 设置 → 辅助功能 → 触控 → 轻点背面 → 轻点两下 → 选「简记」 |
 
 ---
 

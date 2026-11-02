@@ -1,6 +1,6 @@
 //
 //  Enums.swift
-//  轻点记账
+//  简记
 //
 //  全局枚举定义。所有 @Model 里以 Raw 字符串落库，避免 SwiftData 迁移时
 //  对枚举 CaseIterable 支持不足导致的问题。

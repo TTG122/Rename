@@ -1,8 +1,8 @@
 //
 //  Theme.swift
-//  轻点记账
+//  简记
 //
-//  视觉系统：苹果原生语言 + 清新绿主色。
+//  视觉系统：苹果原生语言 + 清澈蓝主色（取自 App 图标的蓝色渐变）。
 //  所有颜色都是语义色，自动适配深色模式。
 //
 
@@ -11,9 +11,10 @@ import UIKit
 
 enum Theme {
     // MARK: 主色
-    /// 清新苹果绿
-    static let brand = Color(light: "#34C759", dark: "#30D158")
-    static let brandSoft = Color(light: "#E8F9ED", dark: "#12301D")
+    /// 图标同源的清澈蓝
+    static let brand = Color(light: "#0A72FB", dark: "#3D9BFF")
+    /// 主色的淡底，用于图标底衬、选中态
+    static let brandSoft = Color(light: "#E9F1FF", dark: "#0D2038")
 
     // MARK: 收支
     static let income = Color(light: "#34C759", dark: "#30D158")
@@ -21,8 +22,8 @@ enum Theme {
     static let expense = Color(light: "#F26B4E", dark: "#FF8266")
 
     // MARK: 背景
-    static let background = Color(light: "#F4F5F7", dark: "#000000")
-    static let groupedBackground = Color(light: "#F4F5F7", dark: "#0B0B0C")
+    static let background = Color(light: "#F4F6FB", dark: "#000000")
+    static let groupedBackground = Color(light: "#F4F6FB", dark: "#0B0B0C")
     static let card = Color(light: "#FFFFFF", dark: "#1C1C1E")
     static let cardElevated = Color(light: "#FFFFFF", dark: "#242426")
 

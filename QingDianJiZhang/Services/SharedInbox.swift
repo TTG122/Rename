@@ -1,6 +1,6 @@
 //
 //  SharedInbox.swift
-//  轻点记账
+//  简记
 //
 //  App 与 Share Extension 之间的「收件箱」。使用 App Group 共享容器，
 //  分享进来的截图先落到 Inbox，主 App 启动后扫描并逐条识别。

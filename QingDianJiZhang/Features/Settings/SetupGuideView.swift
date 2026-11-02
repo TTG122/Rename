@@ -1,6 +1,6 @@
 //
 //  SetupGuideView.swift
-//  轻点记账
+//  简记
 //
 //  双击背面 + 快捷指令的完整配置教程。这是整个产品的入口，必须讲得足够清楚。
 //
@@ -62,11 +62,11 @@ struct SetupGuideView: View {
     private var step1: some View {
         StepCard(index: 1, title: "创建一个快捷指令") {
             VStack(alignment: .leading, spacing: 8) {
-                Text("打开「快捷指令」App → 点右上角 + → 新建一个快捷指令，命名为「轻点记账」。")
+                Text("打开「快捷指令」App → 点右上角 + → 新建一个快捷指令，命名为「简记」。")
                 Text("然后依次添加 3 个操作：")
                 actionList([
                     ("1", "获取图像", "输入类型选「图像」，来源用「快捷指令输入」"),
-                    ("2", "轻点记账", "在搜索框搜「轻点记账」，选「识别并记账」"),
+                    ("2", "简记", "在搜索框搜「简记」，选「识别并记账」"),
                     ("3", "保存到相册（可选）", "想留一份截图备份就加这一步")
                 ])
                 Button {
@@ -85,7 +85,7 @@ struct SetupGuideView: View {
     private var step2: some View {
         StepCard(index: 2, title: "打开「轻点背面」") {
             VStack(alignment: .leading, spacing: 8) {
-                Text("设置 → 辅助功能 → 触控 → 轻点背面 → 轻点两下 → 选择「轻点记账」。")
+                Text("设置 → 辅助功能 → 触控 → 轻点背面 → 轻点两下 → 选择「简记」。")
                 Text("这条路是系统级的，所以你在任何 App 里双击背面都能触发，不需要我们常驻后台。")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textTertiary)
@@ -116,7 +116,7 @@ struct SetupGuideView: View {
         StepCard(index: 4, title: "试一次") {
             VStack(alignment: .leading, spacing: 8) {
                 Text("随便打开一张支付截图，双击手机背面。你会感觉到一下轻震，然后弹出识别面板。")
-                Text("如果没反应，回到第 2 步确认「轻点两下」确实选到了「轻点记账」。")
+                Text("如果没反应，回到第 2 步确认「轻点两下」确实选到了「简记」。")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textTertiary)
             }
@@ -134,7 +134,7 @@ struct SetupGuideView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.textSecondary)
             Text("· 优先让快捷指令把你当前屏幕的截图传进来，识别在本机完成")
-            Text("· 拿不到截图时，可以用分享菜单把截图发到轻点记账，或者从相册批量导入")
+            Text("· 拿不到截图时，可以用分享菜单把截图发到简记，或者从相册批量导入")
             Text("· 也可以直接导入微信 / 支付宝导出的账单文件，一次补齐历史")
         }
         .font(.system(size: 12))

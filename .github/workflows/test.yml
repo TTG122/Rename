@@ -1,0 +1,84 @@
+name: Test
+
+# 在 GitHub 的 macOS 机器上跑真正的 XCTest（本机没有 Mac 也能验证）。
+#
+# 用法：
+#   1. 推到仓库后，Actions → Test → Run workflow
+#   2. 绿色 = 全部用例通过；红色点进去看 Xcode 输出的失败断言
+#
+# 顺带会在 ubuntu 上跑 tools/verify_parser.py——它把 ReceiptParser 的规则
+# 1:1 移植成 Python，几秒钟就能跑完，适合每次改解析规则后先自测一遍。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  parser-rules:
+    name: 解析规则（Python 等价验证）
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run verifier
+        run: python tools/verify_parser.py
+
+  xctest:
+    name: XCTest（真机同款 Swift 代码）
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Normalize repo layout
+        # 与 build-ipa.yml 相同：兼容网页拖拽上传后多套一层目录的情况
+        run: |
+          set -e
+          for d in */ ; do
+            name="${d%/}"
+            if [ -f "${name}/QingDianJiZhang.xcodeproj/project.pbxproj" ]; then
+              echo "检测到嵌套工程目录：${name}，正在摊平到仓库根目录"
+              shopt -s dotglob nullglob
+              cp -Rn "${name}/." . || true
+              rm -rf "${name}"
+            fi
+          done
+          ls -1
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | head -30
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild test \
+            -project QingDianJiZhang.xcodeproj \
+            -scheme QingDianJiZhang \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build/xctest.log
+
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctest-logs
+          path: |
+            build/xctest.log
+            build/DerivedData/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7

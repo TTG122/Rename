@@ -1,6 +1,6 @@
 //
 //  AppRouter.swift
-//  轻点记账
+//  简记
 //
 //  全局导航 / 弹层 / Toast 状态。App Intents、Share Extension 的启动参数
 //  最终都汇总到这里，由根视图统一呈现（保证「不进入完整 App 也能记账」）。

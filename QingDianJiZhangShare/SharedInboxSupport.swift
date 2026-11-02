@@ -1,6 +1,6 @@
 //
 //  SharedInboxSupport.swift
-//  轻点记账 · 分享扩展
+//  简记 · 分享扩展
 //
 //  注意：这个文件是主 App 里 SharedInbox.swift 的精简副本。
 //  扩展是独立 target，不能直接链接主 App 的代码，复制一份最省事，

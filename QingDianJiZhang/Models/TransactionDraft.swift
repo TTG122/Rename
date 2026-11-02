@@ -1,6 +1,6 @@
 //
 //  TransactionDraft.swift
-//  轻点记账
+//  简记
 //
 //  识别结果 → 待确认草稿。UI 在草稿上改金额 / 分类 / 备注，
 //  确认后由 RecordService 落库。

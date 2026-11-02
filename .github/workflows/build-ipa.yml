@@ -5,7 +5,7 @@ name: Build IPA
 # 用法：
 #   1. 把这个目录推到你的 GitHub 仓库
 #   2. Actions → Build IPA → Run workflow
-#   3. 跑完后在本次运行的 Artifacts 里下载 轻点记账-sideload.ipa
+#   3. 跑完后在本次运行的 Artifacts 里下载 简记-sideload.ipa
 #
 # 说明：
 #   · 产出的是「未签名 + 已剥离扩展」的自签版 IPA，配合 Sideloadly / AltStore 用
@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qingdian-sideload-ipa
-          path: build/轻点记账-sideload.ipa
+          path: build/简记-sideload.ipa
           if-no-files-found: error
           retention-days: 30
 
@@ -93,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qingdian-full-ipa
-          path: build/轻点记账-unsigned.ipa
+          path: build/简记-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
 

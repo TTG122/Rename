@@ -1,6 +1,6 @@
 //
 //  ClassifierTests.swift
-//  轻点记账 · 单元测试
+//  简记 · 单元测试
 //
 
 import XCTest

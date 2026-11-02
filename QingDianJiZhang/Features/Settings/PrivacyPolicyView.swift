@@ -1,6 +1,6 @@
 //
 //  PrivacyPolicyView.swift
-//  轻点记账
+//  简记
 //
 //  隐私说明（App Store 审核也会看这一页）。
 //
@@ -50,7 +50,7 @@ struct PrivacyPolicyView: View {
                         Image(systemName: "hand.raised.fill")
                             .font(.system(size: 26))
                             .foregroundStyle(Theme.brand)
-                        Text("轻点记账的隐私原则")
+                        Text("简记的隐私原则")
                             .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Theme.textPrimary)
                         Text("你的账，只在你自己的手机上。")

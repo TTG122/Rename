@@ -1,6 +1,6 @@
 //
 //  VoiceRecorder.swift
-//  轻点记账
+//  简记
 //
 //  语音记账：系统语音识别 + 实时波形。默认优先使用设备端识别（on-device），
 //  只有设备不支持时才回落到在线识别，并在 UI 上明确提示。
@@ -47,7 +47,7 @@ final class VoiceRecorder {
         }
         guard speechStatus == .authorized else {
             phase = .denied
-            errorMessage = "语音识别权限未开启，请在「设置 → 轻点记账 → 语音识别」中打开"
+            errorMessage = "语音识别权限未开启，请在「设置 → 简记 → 语音识别」中打开"
             return false
         }
 
@@ -58,7 +58,7 @@ final class VoiceRecorder {
         }
         guard micGranted else {
             phase = .denied
-            errorMessage = "麦克风权限未开启，请在「设置 → 轻点记账 → 麦克风」中打开"
+            errorMessage = "麦克风权限未开启，请在「设置 → 简记 → 麦克风」中打开"
             return false
         }
 

@@ -89,7 +89,7 @@ jobs:
       - name: Rename asset (ASCII 文件名，避免下载时中文被转义)
         id: asset
         run: |
-          SRC="build/轻点记账-sideload.ipa"
+          SRC="build/简记-sideload.ipa"
           DST="build/QingDianJiZhang-${{ steps.meta.outputs.version }}-sideload.ipa"
           cp "$SRC" "$DST"
           ls -lh "$DST"
@@ -109,9 +109,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.meta.outputs.version }}
-          name: 轻点记账 v${{ steps.meta.outputs.version }}
+          name: 简记 v${{ steps.meta.outputs.version }}
           body: |
-            ## 轻点记账 v${{ steps.meta.outputs.version }}
+            ## 简记 v${{ steps.meta.outputs.version }}
 
             ${{ github.event.inputs.notes }}
 

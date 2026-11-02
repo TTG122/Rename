@@ -1,6 +1,6 @@
 //
 //  Haptics.swift
-//  轻点记账
+//  简记
 //
 
 import UIKit

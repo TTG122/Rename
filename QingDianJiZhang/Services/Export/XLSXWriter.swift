@@ -1,6 +1,6 @@
 //
 //  XLSXWriter.swift
-//  轻点记账
+//  简记
 //
 //  生成最小可用的 .xlsx（Office Open XML）。Excel / Numbers / WPS 都能直接打开。
 //

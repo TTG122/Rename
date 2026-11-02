@@ -1,6 +1,6 @@
 //
 //  CaptureConfirmView.swift
-//  轻点记账
+//  简记
 //
 //  识别确认面板 —— 全 App 出现频率最高的界面。
 //
@@ -99,7 +99,7 @@ struct CaptureConfirmView: View {
             Image(systemName: "hand.tap.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.brand)
-            Text("轻点记账 · 识别结果")
+            Text("简记 · 识别结果")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.textSecondary)
             Spacer()

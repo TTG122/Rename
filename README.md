@@ -1,10 +1,12 @@
-# 轻点记账 · QingDianJiZhang
+# 简记 · QingDianJiZhang
 
 **双击 iPhone 背面，2 秒记完一笔。**
 
 一个原生 iOS 记账 App：付完钱停在支付成功页，双击手机背面 → 快捷指令把截图交给 App → Apple Vision 在本机识别金额与商户 → 弹出系统风格分类面板 → 点一下分类就入账，2 秒后自动收起回到原来的页面。
 
 原生技术栈：Swift / SwiftUI / MVVM / SwiftData / Vision / App Intents / App Shortcuts / Share Extension / WidgetKit / Charts / LocalAuthentication。
+
+**当前版本 1.1.0（build 4）**：蓝色账单图标、应用更名「简记」、全局主色由绿改蓝；识别器修复了「交易单号尾数当金额」「余额当金额」「退款判成支出」「商户取到乱码」四类错误。
 
 ---
 
@@ -107,7 +109,7 @@ GitHub 仓库 → Actions → Build IPA → Run workflow → flavor 选 sideload
 等 2~4 分钟 → 本次运行的 Artifacts → 下载 qingdian-sideload-ipa
 ```
 
-拿到 `轻点记账-sideload.ipa` 之后，用 Sideloadly / AltStore 签一下就能装（见 `docs/01-安装到iPhone.md`）。
+拿到 `简记-sideload.ipa` 之后，用 Sideloadly / AltStore 签一下就能装（见 `docs/01-安装到iPhone.md`）。
 公开仓库完全免费，私有仓库的免费额度也足够（一次构建 2–4 分钟）。
 
 > 这条路只解决「编译」，不解决「签名」。签名必须用你自己的 Apple ID 在本机完成——
@@ -118,7 +120,7 @@ GitHub 仓库 → Actions → Build IPA → Run workflow → flavor 选 sideload
 ```bash
 chmod +x tools/*.sh
 ./tools/build-ipa-sideload.sh
-# 产物：build/轻点记账-sideload.ipa
+# 产物：build/简记-sideload.ipa
 ```
 
 这个 IPA 是**未签名**的，拿去用 Sideloadly / AltStore / ESign 导入，用你自己的 Apple ID 签一下就能装。详细步骤见 `docs/01-安装到iPhone.md`。
@@ -161,8 +163,8 @@ Models (SwiftData)         Transaction / Category / MerchantRule / Budget
 
 ```
 双击背面
-  → iOS 运行快捷指令「轻点记账」
-  → 快捷指令：获取图像（截图）→ 轻点记账 App Intent
+  → iOS 运行快捷指令「简记」
+  → 快捷指令：获取图像（截图）→ 简记 App Intent
   → RecordFromImageIntent.perform()   [openAppWhenRun = true]
   → CapturePipeline.process(imageData:)   ← OCR → 解析 → 分类 → 查重
   → 判定：
@@ -286,6 +288,7 @@ Models (SwiftData)         Transaction / Category / MerchantRule / Budget
 - **调分类阈值**：`RuleBasedClassifier` 里 `0.55 + best.score * 0.12`，或设置页的「自动记账置信度」滑杆。
 - **换配色**：`Design/Theme.swift` 里的语义色，深浅色都在一处。
 - **改图标**：改 `tools/make_icon.py` 里的坐标/颜色后重跑，或直接替换 `AppIcon-1024.png`（1024×1024，不带透明通道）。
+- **改主色**：`Design/Theme.swift` 里的 `brand`（主色）和 `brandSoft`（淡底），再加上 `Assets.xcassets/AccentColor` 一处，改完整个 App 的强调色都跟着变；`income` / `expense` 是语义色（收入绿 / 支出橙红），不建议跟着换。
 
 ---
 
@@ -296,3 +299,4 @@ Models (SwiftData)         Transaction / Category / MerchantRule / Budget
 - `docs/03-AppStore文案与截图.md` —— 名称、副标题、关键词、描述、截图文案与拍摄清单
 - `docs/04-隐私政策与合规.md` —— 可直接发布的隐私政策文本 + 审核答复模板
 - `docs/05-快捷指令与双击背面.md` —— 快捷指令的逐步搭建说明 + 排错
+- `docs/06-更新与分发.md` —— 新版本怎么推给手机（自签重装 / TestFlight / App Store 三条通路对比 + 发版检查清单）

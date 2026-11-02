@@ -11,7 +11,7 @@
 1. 登录 <https://appstoreconnect.apple.com>
 2. 我的 App → `+` → 新建 App
    - 平台：iOS
-   - 名称：**轻点记账**（App Store 上不能重名，被占了就在名字里加后缀，例如「轻点记账 - 双击记一笔」）
+   - 名称：**简记**（App Store 上不能重名，被占了就在名字里加后缀，例如「简记 - 双击记一笔」）
    - 主要语言：简体中文
    - 套装 ID：选你在 Xcode 里注册的 `com.xxx.qingdianjizhang`
    - SKU：随意唯一字符串，例如 `qingdianjizhang001`
@@ -25,7 +25,7 @@
 - [x] Bundle ID 前缀一致（`.app` / `.share` / `.widget`）
 - [x] 主 App 添加了 **App Groups** → `group.com.qingdianjizhang.app`（三个 target 都要勾）
 - [x] 主 App 添加了 **iCloud** → CloudKit → 容器 `iCloud.com.qingdianjizhang.app`
-- [x] 版本号 `MARKETING_VERSION = 1.0.0`、`CURRENT_PROJECT_VERSION = 1`
+- [x] 版本号 `MARKETING_VERSION = 1.1.0`、`CURRENT_PROJECT_VERSION = 4`
 
 ### 1.3 隐私清单与权限文案
 
@@ -34,7 +34,7 @@
 
 ### 1.4 图标
 
-`AppIcon-1024.png` 必须是 1024×1024、**不带透明通道**、**不带圆角**（圆角由系统裁）。想换图标：改 `tools/make_icon.py` 重跑。
+`AppIcon-1024.png` 必须是 1024×1024、**不带透明通道**、**不带圆角**（圆角由系统裁）。想换图标：直接把设计稿导出成 1024×1024 PNG 覆盖这个文件即可（`tools/make_icon.py` 是早期的纯代码生成方式，仍可重跑）。
 
 ---
 

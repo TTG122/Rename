@@ -1,6 +1,6 @@
 //
 //  ActivityView.swift
-//  轻点记账
+//  简记
 //
 //  系统分享面板包装。用于导出 CSV / Excel / PDF / 长图、以及分享月报。
 //

@@ -1,6 +1,6 @@
 //
 //  RecordService.swift
-//  轻点记账
+//  简记
 //
 //  账单写入的唯一入口。所有新增 / 修改 / 撤销都要走这里，
 //  以保证：查重指纹一致、商户规则被学习、小组件快照被刷新。
@@ -164,7 +164,7 @@ enum RecordService {
             try context.save()
         } catch {
             #if DEBUG
-            print("[轻点记账] 保存失败：\(error)")
+            print("[简记] 保存失败：\(error)")
             #endif
         }
     }

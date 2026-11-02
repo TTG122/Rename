@@ -1,8 +1,8 @@
 //
 //  ShareViewController.swift
-//  轻点记账 · 分享扩展
+//  简记 · 分享扩展
 //
-//  在微信 / 支付宝 / 相册里点「分享」→ 选「轻点记账」，截图会落到 App Group
+//  在微信 / 支付宝 / 相册里点「分享」→ 选「简记」，截图会落到 App Group
 //  的收件箱，然后尝试唤起主 App 直接弹出识别面板。
 //
 //  如果系统不允许扩展唤起宿主 App（不同 iOS 版本表现不同），收件箱里的图片
@@ -38,7 +38,7 @@ final class ShareViewController: UIViewController {
         spinner.startAnimating()
 
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.text = "正在发送到轻点记账…"
+        statusLabel.text = "正在发送到简记…"
         statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
         statusLabel.textColor = .label
         statusLabel.textAlignment = .center
@@ -102,9 +102,9 @@ final class ShareViewController: UIViewController {
             return
         }
 
-        statusLabel.text = "已发送 \(savedCount) 项，正在打开轻点记账…"
+        statusLabel.text = "已发送 \(savedCount) 项，正在打开简记…"
         openHostApp()
-        finish(with: "已发送 \(savedCount) 项\n如果没有自动跳转，请手动打开轻点记账")
+        finish(with: "已发送 \(savedCount) 项\n如果没有自动跳转，请手动打开简记")
     }
 
     // MARK: - 读取附件

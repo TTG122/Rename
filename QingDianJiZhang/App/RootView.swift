@@ -1,6 +1,6 @@
 //
 //  RootView.swift
-//  轻点记账
+//  简记
 //
 //  根视图：承载 4 个 Tab、全局轻提示、识别确认面板、引导页和 Face ID 锁。
 //  「双击背面 → 确认面板」就是靠这里的 sheet 实现的：App 被唤起后只显示一个
@@ -130,7 +130,7 @@ private struct LockScreenView: View {
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 44, weight: .light))
                     .foregroundStyle(Theme.brand)
-                Text("轻点记账已锁定")
+                Text("简记已锁定")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Button("用 \(BiometricLock.biometryName) 解锁", action: onUnlock)

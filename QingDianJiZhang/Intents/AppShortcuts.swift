@@ -1,6 +1,6 @@
 //
 //  AppShortcuts.swift
-//  轻点记账
+//  简记
 //
 //  系统「快捷指令」里的预设入口。用户装完 App 就能在快捷指令库看到这几条，
 //  不需要自己从零搭。
@@ -36,7 +36,7 @@ struct QingDianAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "打开\(.applicationName)"
             ],
-            shortTitle: "打开轻点记账",
+            shortTitle: "打开简记",
             systemImageName: "house.fill"
         )
     }

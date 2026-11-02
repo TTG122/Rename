@@ -1,6 +1,6 @@
 //
 //  QingDianJiZhangWidget.swift
-//  轻点记账 · 桌面小组件
+//  简记 · 桌面小组件
 //
 //  小组件进程不打开 SwiftData 主库，只读 App 写好的 JSON 快照，稳定且快。
 //

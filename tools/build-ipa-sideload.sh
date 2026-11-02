@@ -14,7 +14,7 @@
 #
 # 用法：
 #   ./tools/build-ipa-sideload.sh
-#   产物：build/轻点记账-sideload.ipa
+#   产物：build/简记-sideload.ipa
 #
 set -euo pipefail
 
@@ -59,7 +59,7 @@ fi
 # 保证 zip 里第一条路径是 Payload/，不是 Payload-sideload/。
 ROOT_DIR="$(pwd)"
 STAGE="${BUILD_DIR}/sideload-stage"
-IPA_PATH="${ROOT_DIR}/${BUILD_DIR}/轻点记账-sideload.ipa"
+IPA_PATH="${ROOT_DIR}/${BUILD_DIR}/简记-sideload.ipa"
 rm -rf "$STAGE"
 mkdir -p "${STAGE}/Payload"
 cp -R "$APP_PATH" "${STAGE}/Payload/"

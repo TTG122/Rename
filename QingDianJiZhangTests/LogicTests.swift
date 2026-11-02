@@ -1,6 +1,6 @@
 //
 //  LogicTests.swift
-//  轻点记账 · 单元测试（查重 / 语音 / 导入 / Excel / 月报）
+//  简记 · 单元测试（查重 / 语音 / 导入 / Excel / 月报）
 //
 
 import XCTest

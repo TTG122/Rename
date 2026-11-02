@@ -1,6 +1,6 @@
 //
 //  ReceiptParser.swift
-//  轻点记账
+//  简记
 //
 //  从 OCR 文本里解析出：金额 / 商户 / 商品 / 时间 / 平台 / 订单号 / 收支方向。
 //
@@ -68,7 +68,9 @@ enum ReceiptParser {
         "单价", "时间", "备注", "我的", "首页", "恭喜", "完成", "返回", "银联",
         "银行卡", "订单", "详情", "全部", "收起", "复制", "分享", "评价", "再来一单",
         "查看账单", "安全保障", "中国大陆", "服务中心", "发票", "联系商家", "申请售后",
-        "积分", "余额", "零钱", "钱包", "收款方", "付款方", "转账", "银行"
+        "积分", "余额", "零钱", "钱包", "收款方", "付款方", "转账", "银行",
+        // 钱包流水页的标签词，OCR 后常常单独成行，容易被误判成商户
+        "类型", "状态", "说明", "明细", "零钱明细", "交易详情", "退款详情", "账单详情", "全部账单"
     ]
 
     private static let merchantSuffixHints = [
@@ -134,7 +136,8 @@ enum ReceiptParser {
     // MARK: - 收支方向
 
     private static let incomeKeywords = [
-        "收款成功", "已收款", "收款到账", "收款", "收入", "退款成功", "已退款",
+        "收款成功", "已收款", "收款到账", "收款", "收入", "退款成功", "已退款", "退款到账",
+        "退款", "退回", "退货退款",
         "工资", "薪资", "奖金", "红包到账", "到账", "入账", "转入", "返现", "提现"
     ]
 
@@ -149,8 +152,14 @@ enum ReceiptParser {
         let expenseHits = expenseKeywords.filter { normalized.contains(TextNormalizer.normalize($0)) }
 
         // 「退款」优先级最高：退款一定是收入
-        if normalized.contains("退款成功") || normalized.contains("已退款") || normalized.contains("退款到账") {
+        if normalized.contains("退款成功") || normalized.contains("已退款") || normalized.contains("退款到账")
+            || normalized.contains("退货退款") {
             return (.income, 0.95, "命中退款关键词")
+        }
+
+        // 金额前带正负号（零钱明细、银行流水的标准写法）：「+4.00」必然是收入
+        if let signed = detectSignedKind(in: text) {
+            return signed
         }
 
         if incomeHits.count > expenseHits.count {
@@ -165,6 +174,25 @@ enum ReceiptParser {
             return (.expense, 0.45, "没有明确方向关键词")
         }
         return (.expense, 0.55, "收支关键词数量相当")
+    }
+
+    /// 整行就是「+4.00」「-12.80」这种带符号金额时，符号本身就是最可靠的方向依据
+    private static func detectSignedKind(in text: String) -> (kind: TransactionKind, confidence: Double, reason: String)? {
+        let pattern = #"^[+＋\-－]\s*[¥￥]?\s*\d"#
+        var plus = 0
+        var minus = 0
+        for raw in text.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            if line.hasPrefix("+") || line.hasPrefix("＋") {
+                if RegexHelper.contains(pattern, in: line) { plus += 1 }
+            } else if line.hasPrefix("-") || line.hasPrefix("－") {
+                if RegexHelper.contains(pattern, in: line) { minus += 1 }
+            }
+        }
+        if plus > 0 && minus == 0 { return (.income, 0.90, "金额前缀为 + 号") }
+        if minus > 0 && plus == 0 { return (.expense, 0.90, "金额前缀为 − 号") }
+        return nil
     }
 
     // MARK: - 金额
@@ -186,6 +214,8 @@ enum ReceiptParser {
         let range: Range<String.Index>
         let hasSymbol: Bool
         let hasYuanSuffix: Bool
+        /// 带小数（"4.00"）比裸整数（"9895"）更可能是金额，而不是单号碎片
+        let hasFraction: Bool
     }
 
     private static func amountTokens(in text: String) -> [AmountToken] {
@@ -196,14 +226,17 @@ enum ReceiptParser {
             guard let cents = MoneyFormatter.cents(fromYuanText: digits) else { return nil }
             // 合理区间：1 分 ~ 100 万元
             guard cents >= 1, cents <= 100_000_000 else { return nil }
-            let prefix = text[text.startIndex..<match.range.lowerBound].suffix(2)
-            let hasSymbol = prefix.contains("¥") || prefix.contains("￥")
+            // 货币符号在正则里属于匹配内容，不能用「匹配前的字符」判断，否则永远为 false
+            let upperValue = match.value.uppercased()
+            let hasSymbol = match.value.contains("¥") || match.value.contains("￥")
+                || upperValue.contains("RMB") || upperValue.contains("CNY")
             let suffix = match.groups.count > 1 ? (match.groups[1] ?? "") : ""
             return AmountToken(
                 cents: cents,
                 range: match.range,
                 hasSymbol: hasSymbol,
-                hasYuanSuffix: !suffix.isEmpty
+                hasYuanSuffix: !suffix.isEmpty,
+                hasFraction: digits.contains(".")
             )
         }
     }
@@ -215,15 +248,43 @@ enum ReceiptParser {
             let source: String
         }
         var candidates: [Candidate] = []
+        /// 通过「非单号、非余额」筛选后的金额，供兜底使用
+        var safeTokens: [AmountToken] = []
 
-        for line in lines {
+        // 单独一行、且带正负号：「+4.00」「-12.80」，退款与流水页面的标准写法
+        let signedLinePattern = #"^[+＋\-－]\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?$"#
+
+        for (index, line) in lines.enumerated() {
             let clean = cleaned(line)
             guard !clean.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+
+            // 整行是单号 / 流水号：直接作废，避免把号码尾数当成金额
+            guard !looksLikeOrderNumber(clean) else {
+                notes.append("跳过疑似单号行：\(line)")
+                continue
+            }
+
             let tokens = amountTokens(in: clean)
             guard !tokens.isEmpty else { continue }
 
             let lowered = TextNormalizer.normalize(clean)
-            let isDiscountLine = discountKeywords.contains { lowered.contains(TextNormalizer.normalize($0)) }
+            let previousLine = index > 0 ? TextNormalizer.normalize(lines[index - 1]) : ""
+            // 「余额」标签和数值常常分两行，需要用上一行判断这个数字属于余额
+            let isBalanceLine = lowered.contains("余额") || lowered.contains("可用额度")
+                || previousLine == "余额" || previousLine == "可用额度"
+            let isDiscountLine = isBalanceLine
+                || discountKeywords.contains { lowered.contains(TextNormalizer.normalize($0)) }
+
+            if !isBalanceLine {
+                safeTokens.append(contentsOf: tokens)
+            }
+
+            let trimmed = clean.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !isDiscountLine,
+               RegexHelper.contains(signedLinePattern, in: trimmed),
+               let token = tokens.first {
+                candidates.append(Candidate(cents: token.cents, score: 98, source: line))
+            }
 
             for entry in amountKeywords {
                 // 用原始字符串定位关键词，保证索引和金额 token 处在同一坐标系
@@ -253,19 +314,64 @@ enum ReceiptParser {
             return best.cents
         }
 
-        // 兜底：全文最大金额
-        let allTokens = lines.flatMap { amountTokens(in: cleaned($0)) }
-        if let biggest = allTokens.map(\.cents).max() {
-            notes.append("金额兜底：取全文最大金额")
-            return biggest
+        // 兜底不再「取全文最大数字」：只接受带货币符号、带「元」或带小数的金额。
+        // 宁可返回空让用户手填，也不要把单号碎片记成一笔错账。
+        let usable = safeTokens.filter { $0.hasSymbol || $0.hasYuanSuffix || $0.hasFraction }
+        if let best = usable.max(by: { $0.cents < $1.cents }) {
+            notes.append("金额兜底：取带符号或小数的最大金额 \(MoneyFormatter.string(cents: best.cents))")
+            return best.cents
         }
-        notes.append("未识别到金额")
+        notes.append("未识别到可信金额，请手动填写")
         return nil
+    }
+
+    /// 单号 / 流水号 / 12 位以上长数字：不可能是金额
+    private static func looksLikeOrderNumber(_ text: String) -> Bool {
+        let digits = text.filter { $0.isNumber }
+        guard !digits.isEmpty else { return false }
+        if digits.count >= 12 { return true }
+        let hasLabel = ["单号", "订单", "流水", "凭证", "交易号", "编号"].contains { text.contains($0) }
+        return hasLabel && digits.count >= 8
     }
 
     // MARK: - 商户
 
     private static func extractMerchant(lines: [String], notes: inout [String]) -> String {
+        // 1) 明确标签：商户 / 收款方 / 商家 —— 标签后面的值最可信
+        let labelPrefixes = ["商户名称", "商户全称", "交易对方", "收款方", "商家名称", "商户", "商家", "对方"]
+        for (index, rawLine) in lines.enumerated() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            for prefix in labelPrefixes where line.hasPrefix(prefix) {
+                var value = String(line.dropFirst(prefix.count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: " :：-—|·、,，"))
+                if value.isEmpty, index + 1 < lines.count {
+                    value = lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                let merchantName = cleanMerchant(value)
+                if isPlausibleMerchant(merchantName) {
+                    notes.append("商户来源：标签「\(prefix)」")
+                    return merchantName
+                }
+            }
+        }
+
+        // 2) 备注：微信零钱明细、银行流水常常只给「备注」，里面才是真正的商户或用途
+        for (index, rawLine) in lines.enumerated() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix("备注") else { continue }
+            var value = String(line.dropFirst(2))
+                .trimmingCharacters(in: CharacterSet(charactersIn: " :：-—|·、,，"))
+            if value.isEmpty, index + 1 < lines.count {
+                value = lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            let merchantName = cleanMerchant(value)
+            if isPlausibleMerchant(merchantName) {
+                notes.append("商户来源：备注")
+                return merchantName
+            }
+        }
+
+        // 3) 评分兜底
         struct Candidate {
             let text: String
             let score: Double
@@ -276,6 +382,11 @@ enum ReceiptParser {
         for (index, rawLine) in lines.enumerated() {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard line.count >= 2, line.count <= 40 else { continue }
+            // OCR 乱码（如「£! 今®9」）与纯标签词在这里就被挡掉
+            guard isPlausibleMerchant(line) else { continue }
+            let cjkCount = line.unicodeScalars.filter { $0.properties.isIdeographic }.count
+            guard cjkCount >= 3 else { continue }
+
             let positionRatio = Double(index) / Double(total)
             let lowered = TextNormalizer.normalize(line)
 
@@ -310,15 +421,43 @@ enum ReceiptParser {
         return ""
     }
 
+    /// 商户名的最低可信标准：长度合理、可读字符占比够、不是纯标签词
+    private static func isPlausibleMerchant(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, trimmed.count <= 40 else { return false }
+        let lowered = TextNormalizer.normalize(trimmed)
+        guard !lowered.isEmpty else { return false }
+        if merchantBlacklist.contains(where: { lowered == TextNormalizer.normalize($0) }) { return false }
+        // 「商户单号 123456」这类标签行会被前缀匹配误当成商户，这里直接排除
+        let blockedTokens = ["单号", "编号", "流水", "凭证", "订单号", "交易号"]
+        if blockedTokens.contains(where: { trimmed.contains($0) }) { return false }
+
+        let scalars = Array(trimmed.unicodeScalars)
+        let readable = scalars.filter {
+            CharacterSet.alphanumerics.contains($0) || $0.properties.isIdeographic
+        }.count
+        // 乱码行（£ ! ® 之类）可读字符占比很低，直接丢弃
+        guard Double(readable) / Double(max(scalars.count, 1)) >= 0.6 else { return false }
+
+        let cjkCount = scalars.filter { $0.properties.isIdeographic }.count
+        return cjkCount >= 2 || BrandLexicon.containsKnownBrand(trimmed)
+    }
+
     private static func cleanMerchant(_ line: String) -> String {
         var text = line
-        for prefix in ["商户名称", "商户全称", "收款方", "商户", "名称"] {
+        for prefix in ["商户名称", "商户全称", "收款方", "商户", "商家名称", "商家", "交易对方", "名称", "备注"] {
             if text.hasPrefix(prefix) {
                 text.removeFirst(prefix.count)
             }
         }
         text = text.trimmingCharacters(in: CharacterSet(charactersIn: " :：-—|·、,，"))
-        // 去掉括号里的门店编号之类过长内容
+        // 「京津冀互联互通卡 充值」这类备注，末尾的动作词不是商户名的一部分
+        for suffix in ["充值", "消费", "支付", "付款", "转账", "退款", "扣款"] {
+            if text.hasSuffix(suffix), text.count > suffix.count + 1 {
+                text = String(text.dropLast(suffix.count))
+            }
+        }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.count > 24 {
             text = String(text.prefix(24))
         }

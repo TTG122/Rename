@@ -1,6 +1,6 @@
 //
 //  SettingsView.swift
-//  轻点记账
+//  简记
 //
 
 import SwiftUI
@@ -81,7 +81,7 @@ struct SettingsView: View {
                     Button {
                         openShortcutsApp()
                     } label: {
-                        SettingsRow(symbol: "square.stack.3d.up.fill", title: "打开快捷指令 App", subtitle: "重新安装或编辑「轻点记账」快捷指令") {
+                        SettingsRow(symbol: "square.stack.3d.up.fill", title: "打开快捷指令 App", subtitle: "重新安装或编辑「简记」快捷指令") {
                             Image(systemName: "arrow.up.forward.app").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
                         }
                     }
@@ -223,7 +223,7 @@ struct SettingsView: View {
                 } header: {
                     Text("关于")
                 } footer: {
-                    Text("轻点记账 · 双击背面 2 秒记一笔。所有账单只存在你的 iPhone 上。")
+                    Text("简记 · 双击背面 2 秒记一笔。所有账单只存在你的 iPhone 上。")
                 }
             }
             .listStyle(.insetGrouped)

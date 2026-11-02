@@ -1,6 +1,6 @@
 //
 //  XLSXReader.swift
-//  轻点记账
+//  简记
 //
 //  读取 .xlsx 的第一个工作表，输出字符串二维数组。
 //  只依赖 Foundation 的 XMLParser + 系统 Compression，无第三方库。

@@ -1,6 +1,6 @@
 //
 //  ExportService.swift
-//  轻点记账
+//  简记
 //
 //  导出：CSV / Excel / PDF / 长图。全部本地生成，不上传任何数据。
 //
@@ -80,7 +80,7 @@ enum ExportService {
 
     static func writeTemporaryFile(data: Data, fileName: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("轻点记账导出", isDirectory: true)
+            .appendingPathComponent("简记导出", isDirectory: true)
         if !FileManager.default.fileExists(atPath: directory.path) {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -91,20 +91,20 @@ enum ExportService {
 
     static func exportCSVFile(transactions: [Transaction]) throws -> URL {
         let text = csvString(transactions: transactions)
-        let name = "轻点记账-\(fileNameDate()).csv"
+        let name = "简记-\(fileNameDate()).csv"
         return try writeTemporaryFile(data: Data(text.utf8), fileName: name)
     }
 
     static func exportXLSXFile(transactions: [Transaction]) throws -> URL {
         let data = xlsxData(transactions: transactions)
-        return try writeTemporaryFile(data: data, fileName: "轻点记账-\(fileNameDate()).xlsx")
+        return try writeTemporaryFile(data: data, fileName: "简记-\(fileNameDate()).xlsx")
     }
 
     static func exportPDFFile(report: MonthlyReport) throws -> URL {
         let data = pdfData(report: report)
         return try writeTemporaryFile(
             data: data,
-            fileName: "轻点记账-\(report.monthKey)-月报.pdf"
+            fileName: "简记-\(report.monthKey)-月报.pdf"
         )
     }
 
@@ -171,8 +171,8 @@ enum ExportService {
             let gray = UIColor(white: 0.45, alpha: 1)
 
             // 标题
-            draw("轻点记账 · \(report.monthTitle)月报", font: .systemFont(ofSize: 24, weight: .bold), color: dark, spacingAfter: 4)
-            draw("由轻点记账自动生成 · 数据仅保存在本机", font: .systemFont(ofSize: 11), color: gray, spacingAfter: 18)
+            draw("简记 · \(report.monthTitle)月报", font: .systemFont(ofSize: 24, weight: .bold), color: dark, spacingAfter: 4)
+            draw("由简记自动生成 · 数据仅保存在本机", font: .systemFont(ofSize: 11), color: gray, spacingAfter: 18)
 
             // 核心数字
             draw("本月支出  ¥\(MoneyFormatter.grouped(cents: report.totalExpenseCents))", font: .systemFont(ofSize: 30, weight: .bold), color: brand, spacingAfter: 8)
@@ -235,8 +235,8 @@ enum ExportService {
 
     static func saveLongImageToTemporary(_ image: UIImage) throws -> URL {
         guard let data = image.pngData() else {
-            throw NSError(domain: "轻点记账", code: 500, userInfo: [NSLocalizedDescriptionKey: "长图生成失败"])
+            throw NSError(domain: "简记", code: 500, userInfo: [NSLocalizedDescriptionKey: "长图生成失败"])
         }
-        return try writeTemporaryFile(data: data, fileName: "轻点记账-月报-\(fileNameDate()).png")
+        return try writeTemporaryFile(data: data, fileName: "简记-月报-\(fileNameDate()).png")
     }
 }

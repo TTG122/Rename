@@ -1,6 +1,6 @@
 //
 //  BiometricLock.swift
-//  轻点记账
+//  简记
 //
 
 import Foundation
@@ -26,7 +26,7 @@ enum BiometricLock {
     }
 
     /// 解锁。失败返回 false，不抛错。
-    static func unlock(reason: String = "解锁轻点记账") async -> Bool {
+    static func unlock(reason: String = "解锁简记") async -> Bool {
         let context = LAContext()
         context.localizedCancelTitle = "取消"
         var error: NSError?

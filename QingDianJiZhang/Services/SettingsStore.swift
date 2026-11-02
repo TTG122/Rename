@@ -1,6 +1,6 @@
 //
 //  SettingsStore.swift
-//  轻点记账
+//  简记
 //
 //  用户设置。全部落 UserDefaults，不上云。
 //

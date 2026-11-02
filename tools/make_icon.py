@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-生成「轻点记账」App 图标（1024x1024 PNG，无透明通道）。
+生成「简记」App 图标（1024x1024 PNG，无透明通道）。
 纯 Python 实现：行跨度填充 + zlib 打包 PNG，不依赖 Pillow / numpy。
 
 设计：绿色渐变底 + 白色小票（带撕纸齿）+ 三条账单横线。

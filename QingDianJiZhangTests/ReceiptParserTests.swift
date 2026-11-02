@@ -1,6 +1,6 @@
 //
 //  ReceiptParserTests.swift
-//  轻点记账 · 单元测试
+//  简记 · 单元测试
 //
 
 import XCTest
@@ -86,5 +86,69 @@ final class ReceiptParserTests: XCTestCase {
     func testUnknownKindIsUncertain() {
         let result = ReceiptParser.parse(text: "星巴克 36.00")
         XCTAssertLessThan(result.kindConfidence, 0.7, "没有方向关键词时不应该给出高置信度")
+    }
+
+    // MARK: - 回归：微信「零钱明细」退款页
+
+    /// 真实截图：退款 +4.00，交易单号 30 位，余额 ¥4.20。
+    /// 旧逻辑把单号尾数 9895 当成金额，并判成支出。
+    private let walletRefundText = """
+    零钱明细
+    退款
+    +4.00
+    类型
+    退款
+    时间
+    2026年10月31日 18:40:54
+    交易单号
+    142745160226022110097341626253429895
+    余额
+    ¥4.20
+    备注
+    京津冀互联互通卡 充值
+    """
+
+    func testWalletRefundAmountComesFromSignedValue() {
+        let result = ReceiptParser.parse(text: walletRefundText)
+        XCTAssertEqual(result.amountCents, 400, "应取 +4.00，而不是交易单号尾数 9895 或余额 4.20")
+    }
+
+    func testWalletRefundIsIncome() {
+        let result = ReceiptParser.parse(text: walletRefundText)
+        XCTAssertEqual(result.kind, .income, "退款带 + 号，必须记为收入")
+        XCTAssertGreaterThan(result.kindConfidence, 0.7)
+    }
+
+    func testWalletRefundMerchantComesFromNote() {
+        let result = ReceiptParser.parse(text: walletRefundText)
+        XCTAssertTrue(result.merchant.contains("京津冀"), "商户应取备注内容，实际：\(result.merchant)")
+        XCTAssertFalse(result.merchant.contains("充值"), "备注里的动作词应被剔除，实际：\(result.merchant)")
+    }
+
+    /// 余额的数值常常单独占一行，不能被误当成金额
+    func testBalanceLineIsNotAmount() {
+        let text = """
+        零钱明细
+        支出
+        -12.80
+        余额
+        ¥1,204.20
+        """
+        let result = ReceiptParser.parse(text: text)
+        XCTAssertEqual(result.amountCents, 1280, "应取 -12.80，而不是余额 1204.20")
+        XCTAssertEqual(result.kind, .expense)
+    }
+
+    /// 单号被 OCR 拆成若干短数字时，也不能取其中一段当金额
+    func testSplitOrderNumberIsNotAmount() {
+        let text = """
+        零钱明细
+        支出
+        -3.50
+        交易单号
+        1427 4516 0226 0221 1009 7341 6262 5342 9895
+        """
+        let result = ReceiptParser.parse(text: text)
+        XCTAssertEqual(result.amountCents, 350, "拆分后的单号片段不能成为金额")
     }
 }

@@ -1,6 +1,6 @@
 //
 //  StatsView.swift
-//  轻点记账
+//  简记
 //
 //  图表与月度总结。所有数字都来自本地 SwiftData，AI 总结是模板化生成，
 //  不调用任何云端模型（除非用户在设置里主动开启，本期默认关闭）。
@@ -602,7 +602,7 @@ struct StatsView: View {
         }
         do {
             let url = try ExportService.saveLongImageToTemporary(image)
-            sharePayload = SharePayload(items: [url, "来自轻点记账的 \(report.monthTitle)月报"])
+            sharePayload = SharePayload(items: [url, "来自简记的 \(report.monthTitle)月报"])
         } catch {
             exportError = error.localizedDescription
         }
@@ -619,7 +619,7 @@ struct ReportShareCard: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("轻点记账")
+                    Text("简记")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.brand)
                     Text("\(report.monthTitle)消费月报")
@@ -682,7 +682,7 @@ struct ReportShareCard: View {
                     .foregroundStyle(Theme.textSecondary)
             }
 
-            Text("由轻点记账生成 · 数据只在本机")
+            Text("由简记生成 · 数据只在本机")
                 .font(.system(size: 9))
                 .foregroundStyle(Theme.textTertiary)
         }

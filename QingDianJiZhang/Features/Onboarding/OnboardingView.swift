@@ -1,6 +1,6 @@
 //
 //  OnboardingView.swift
-//  轻点记账
+//  简记
 //
 //  新用户引导：讲清楚「双击背面 → 2 秒记账」这件事，把权限和快捷指令一次配好。
 //
@@ -121,7 +121,7 @@ struct OnboardingView: View {
             }
 
             VStack(spacing: 10) {
-                Text("轻点记账")
+                Text("简记")
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
                 Text("付完钱，双击手机背面\n2 秒记完一笔")
@@ -170,7 +170,7 @@ struct OnboardingView: View {
                     .foregroundStyle(Theme.textSecondary)
 
                 flowStep(index: "1", title: "你付完钱，停在支付成功页", detail: "微信、支付宝、银行、外卖、购物 App 都行")
-                flowStep(index: "2", title: "双击 iPhone 背面", detail: "系统轻震一下，运行「轻点记账」快捷指令")
+                flowStep(index: "2", title: "双击 iPhone 背面", detail: "系统轻震一下，运行「简记」快捷指令")
                 flowStep(index: "3", title: "本机识别截图文字", detail: "Apple Vision 在你的手机上提取金额和商户")
                 flowStep(index: "4", title: "弹出分类面板", detail: "推荐分类已经选好，点一下或者直接确认")
                 flowStep(index: "5", title: "完成，自动收起", detail: "2 秒内回到原来的页面，还能点撤销")
@@ -315,7 +315,7 @@ struct OnboardingView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Theme.textPrimary)
                     }
-                    Text("设置 → 辅助功能 → 触控 → 轻点背面 → 轻点两下 → 选「轻点记账」。")
+                    Text("设置 → 辅助功能 → 触控 → 轻点背面 → 轻点两下 → 选「简记」。")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.textSecondary)
                         .lineSpacing(2)
