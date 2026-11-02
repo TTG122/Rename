@@ -54,22 +54,39 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-PAYLOAD="${BUILD_DIR}/Payload-sideload"
-rm -rf "$PAYLOAD"
-mkdir -p "$PAYLOAD"
-cp -R "$APP_PATH" "$PAYLOAD/"
+# IPA 规范要求压缩包里必须有一个「名字就叫 Payload」的目录。
+# 所以在 staging 目录里造 Payload/，再 cd 进 staging 打包，
+# 保证 zip 里第一条路径是 Payload/，不是 Payload-sideload/。
+STAGE="${BUILD_DIR}/sideload-stage"
+rm -rf "$STAGE"
+mkdir -p "${STAGE}/Payload"
+cp -R "$APP_PATH" "${STAGE}/Payload/"
+
+APP_IN_STAGE="${STAGE}/Payload/${PROJECT_NAME}.app"
 
 echo "==> 移除内嵌扩展（自签环境不支持带 entitlements 的 appex）"
-rm -rf "${PAYLOAD}/${PROJECT_NAME}.app/PlugIns"
+rm -rf "${APP_IN_STAGE}/PlugIns"
 
 echo "==> 清理旧签名残留"
-rm -rf "${PAYLOAD}/${PROJECT_NAME}.app/_CodeSignature"
-rm -f  "${PAYLOAD}/${PROJECT_NAME}.app/embedded.mobileprovision"
+rm -rf "${APP_IN_STAGE}/_CodeSignature"
+rm -f  "${APP_IN_STAGE}/embedded.mobileprovision"
 
 echo "==> 打包"
 rm -f "${BUILD_DIR}/轻点记账-sideload.ipa"
-(cd "$BUILD_DIR" && zip -qry "轻点记账-sideload.ipa" Payload-sideload)
-mv "${BUILD_DIR}/轻点记账-sideload.ipa" "${BUILD_DIR}/轻点记账-sideload.ipa"
+(cd "$STAGE" && zip -qry "${BUILD_DIR}/轻点记账-sideload.ipa" Payload)
+
+echo "==> 校验包结构"
+FIRST_ENTRY="$(unzip -Z1 "${BUILD_DIR}/轻点记账-sideload.ipa" | head -1)"
+echo "    首条路径: ${FIRST_ENTRY}"
+if [ "${FIRST_ENTRY#Payload/}" = "${FIRST_ENTRY}" ]; then
+  echo "!! 包结构不对：顶层目录必须是 Payload/，实际是 ${FIRST_ENTRY}"
+  exit 1
+fi
+if ! unzip -Z1 "${BUILD_DIR}/轻点记账-sideload.ipa" | grep -q "^Payload/${PROJECT_NAME}.app/Info.plist$"; then
+  echo "!! 包结构不对：缺少 Payload/${PROJECT_NAME}.app/Info.plist"
+  exit 1
+fi
+echo "    结构 OK"
 
 echo "==> 完成：${BUILD_DIR}/轻点记账-sideload.ipa"
 echo ""
