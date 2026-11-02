@@ -8,6 +8,22 @@
 
 ---
 
+## 📲 直接下载（不需要 Mac）
+
+**下载地址：[最新版本 Releases](../../releases/latest)**
+
+在 Releases 里找到 `QingDianJiZhang-x.x.x-sideload.ipa`，下载后按下面三步装到 iPhone：
+
+1. 电脑装 [Sideloadly](https://sideloadly.io)（Windows / macOS 都行），iPhone 打开「设置 → 隐私与安全性 → 开发者模式」
+2. Sideloadly 里选这个 IPA，填**你自己的** Apple ID，点 `Start`
+3. 手机上「设置 → 通用 → VPN 与设备管理」→ 信任你的 Apple ID
+
+> 这个 IPA 是**未签名**的，必须用你自己的 Apple ID 签一次才能装——这是 iOS 的规则，不是我们偷懒。
+> 免费 Apple ID 签名 7 天过期，到期重新签一次，账单数据不会丢。
+> 详细图文（含 12 条排错）：[`docs/00-最快装到手机.md`](docs/00-最快装到手机.md)
+
+---
+
 ## 0. 先看这三条（很重要）
 
 1. **IPA 必须用 macOS + Xcode 编译**。任何「在 Windows 上直接产出 IPA」的说法都是假的——Swift 编译器只有 Apple 工具链里有。本目录交付的是**完整可编译工程**，在 Mac 上一条命令就能出 IPA（见第 3 节）。

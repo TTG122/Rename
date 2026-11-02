@@ -1,0 +1,118 @@
+name: Release IPA
+
+# 发布一个「任何人点开链接就能下载」的 IPA。
+#
+# 和 build-ipa.yml 的区别（很重要）：
+#   · Actions 的 Artifacts   → 只有登录 GitHub 的人能下载，不适合发给普通用户
+#   · GitHub Releases 附件   → 任何人有链接就能下载，不需要账号 ✅
+#
+# 用法：
+#   方式一（推荐）：仓库页面 → Actions → Release IPA → Run workflow
+#   方式二：打 tag 触发 —— git tag v1.0.0 && git push origin v1.0.0
+#
+# 跑完后：仓库首页右侧 Releases 里就有一个版本，附件是 IPA，链接形如
+#   https://github.com/用户名/仓库名/releases/latest/download/QingDianJiZhang-sideload.ipa
+# 把这个链接发出去，谁都能下。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（例如 1.0.0）"
+        required: true
+        default: "1.0.0"
+      notes:
+        description: "发布说明（可留空）"
+        required: false
+        default: "双击 iPhone 背面，2 秒记完一笔。下载后需用自己的 Apple ID 签名安装。"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write      # 创建 Release 需要
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Resolve version
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "resolved version: $VERSION"
+
+      - name: Build sideload IPA
+        run: |
+          chmod +x tools/*.sh
+          ./tools/build-ipa-sideload.sh
+
+      - name: Rename asset (ASCII 文件名，避免下载时中文被转义)
+        id: asset
+        run: |
+          SRC="build/轻点记账-sideload.ipa"
+          DST="build/QingDianJiZhang-${{ steps.meta.outputs.version }}-sideload.ipa"
+          cp "$SRC" "$DST"
+          ls -lh "$DST"
+          echo "path=$DST" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.meta.outputs.version }}
+          name: 轻点记账 v${{ steps.meta.outputs.version }}
+          body: |
+            ## 轻点记账 v${{ steps.meta.outputs.version }}
+
+            ${{ github.event.inputs.notes }}
+
+            ### 怎么装（不需要 Mac）
+            1. 下载下面的 `QingDianJiZhang-${{ steps.meta.outputs.version }}-sideload.ipa`
+            2. 电脑装 [Sideloadly](https://sideloadly.io)（Windows / macOS 都行）
+            3. iPhone 打开「设置 → 隐私与安全性 → 开发者模式」
+            4. Sideloadly 里选这个 IPA，填自己的 Apple ID，点 Start
+            5. 手机上「设置 → 通用 → VPN 与设备管理」信任一下
+
+            ### 需要注意
+            - 免费 Apple ID 签名 **7 天过期**，到期重新签一次，账单数据不丢
+            - 这个包不含分享扩展和桌面小组件（App Groups 需要付费账号），
+              其余功能完整：双击背面识别、相册导入、语音、图表月报、账单导入导出
+            - 本项目源码在同一仓库，欢迎自己编译
+
+            ### 校验
+            - 文件名：`QingDianJiZhang-${{ steps.meta.outputs.version }}-sideload.ipa`
+            - 构建方式：`tools/build-ipa-sideload.sh`（未签名、已剥离扩展）
+          files: ${{ steps.asset.outputs.path }}
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/
+          if-no-files-found: ignore
+          retention-days: 7
