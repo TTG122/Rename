@@ -6,7 +6,7 @@
 
 原生技术栈：Swift / SwiftUI / MVVM / SwiftData / Vision / App Intents / App Shortcuts / Share Extension / WidgetKit / Charts / LocalAuthentication。
 
-**当前版本 1.1.0（build 4）**：蓝色账单图标、应用更名「简记」、全局主色由绿改蓝；识别器修复了「交易单号尾数当金额」「余额当金额」「退款判成支出」「商户取到乱码」四类错误。
+**当前版本 1.1.1（build 5）**：蓝色账单图标、应用更名「简记」、全局主色由绿改蓝；识别器修复了「交易单号尾数当金额」「余额当金额」「退款判成支出」「商户取到乱码」「一屏两笔时金额与方向来自不同笔」「到账页时间取错」六类错误。
 
 ---
 

@@ -151,4 +151,67 @@ final class ReceiptParserTests: XCTestCase {
         let result = ReceiptParser.parse(text: text)
         XCTAssertEqual(result.amountCents, 350, "拆分后的单号片段不能成为金额")
     }
+
+    // MARK: - 回归：真机截图（1.1.0 修复）
+
+    /// 相册预览里一屏两笔：金额被取第一笔，方向却被第二笔的「支付成功」带跑
+    private let twoReceiptsText = """
+    10:17
+    转账成功
+    ¥7300.00
+    10:40
+    支付成功
+    ¥6251.00
+    """
+
+    func testTwoReceiptsTakeTopmostOnly() {
+        let result = ReceiptParser.parse(text: twoReceiptsText)
+        XCTAssertEqual(result.amountCents, 730000, "只应取最上面那一笔 7300.00")
+        XCTAssertEqual(result.kind, .expense, "方向应来自「转账成功」，不是下面那张的「支付成功」")
+        XCTAssertTrue(result.notes.contains { $0.contains("2 笔") }, "应在识别详情里提示画面有两笔")
+    }
+
+    /// 微信「你已收款」到账页：收入 1000，时间取收款时间而不是转账时间
+    private let incomingText = """
+    你已收款，资金已存入零钱
+    ¥1000.00
+    零钱余额
+    转账时间 2026年07月29日 09:17:55
+    收款时间 2026年07月29日 10:28:27
+    """
+
+    func testIncomingTransfer() {
+        let result = ReceiptParser.parse(text: incomingText)
+        XCTAssertEqual(result.kind, .income, "「你已收款」必须是收入")
+        XCTAssertEqual(result.amountCents, 100000)
+        XCTAssertEqual(result.platform, .wechat, "零钱是微信零钱")
+        XCTAssertEqual(result.merchant, "", "「你已收款，资金已存入零钱」是提示语，不是商户")
+    }
+
+    func testIncomingTransferUsesReceiveTime() {
+        let result = ReceiptParser.parse(text: incomingText)
+        XCTAssertTrue(result.didParseDate)
+        let comps = Calendar(identifier: .gregorian).dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: result.occurredAt
+        )
+        XCTAssertEqual(comps.year, 2026)
+        XCTAssertEqual(comps.month, 7)
+        XCTAssertEqual(comps.day, 29)
+        XCTAssertEqual(comps.hour, 10, "应取「收款时间 10:28」，不是「转账时间 09:17」")
+        XCTAssertEqual(comps.minute, 28)
+    }
+
+    /// 药店：商户取「意民平价大药房」，不能被「完成」按钮带偏
+    func testPharmacyPayment() {
+        let result = ReceiptParser.parse(text: """
+        支付成功
+        意民平价大药房
+        ¥96.00
+        完成
+        """)
+        XCTAssertEqual(result.amountCents, 9600)
+        XCTAssertEqual(result.kind, .expense)
+        XCTAssertTrue(result.merchant.contains("意民"), "实际：\(result.merchant)")
+    }
 }

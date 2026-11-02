@@ -103,9 +103,25 @@ INCOME_KEYWORDS = [
 ]
 
 EXPENSE_KEYWORDS = [
-    "支付成功", "付款成功", "交易成功", "已支付", "实付", "付款", "支付",
+    "支付成功", "付款成功", "交易成功", "转账成功", "已支付", "实付", "付款", "支付",
     "消费", "扣款", "支出", "转出", "已扣款", "完成支付",
 ]
+
+# 一笔记录的「标题行」：一张图里出现多个，说明画面里不止一笔
+BLOCK_TITLE_KEYWORDS = [
+    "支付成功", "付款成功", "转账成功", "收款成功", "交易成功", "支付完成",
+    "退款成功", "退款到账", "收款到账", "转账到账", "扣款成功", "还款成功", "已收款",
+]
+
+SENTENCE_MARKS = ["，", "。", "！", "？", "；", ",", "!", "?", ";", "、"]
+SENTENCE_WORDS = [
+    "已收款", "资金", "存入", "已存入", "请", "点击", "已到账", "注意",
+    "支付成功", "转账成功", "收款成功", "交易成功",
+]
+
+PREFERRED_TIME_LABELS = ["收款时间", "支付时间", "付款时间", "交易时间", "扣款时间", "转账时间", "创建时间"]
+
+DATE_PATTERN = r"(\d{4})\s*[-/年.]\s*(\d{1,2})\s*[-/月.]\s*(\d{1,2})\s*日?\s*(?:(\d{1,2})[:：](\d{2}))?"
 
 
 def load_brand_keywords():
@@ -257,6 +273,10 @@ def is_plausible_merchant(text: str) -> bool:
         return False
     if any(tok in trimmed for tok in BLOCKED_TOKENS):
         return False
+    if any(m in trimmed for m in SENTENCE_MARKS):
+        return False
+    if any(w in trimmed for w in SENTENCE_WORDS):
+        return False
     readable = sum(1 for ch in trimmed if ch.isalnum() or _is_cjk(ch))
     if readable / max(len(trimmed), 1) < 0.6:
         return False
@@ -382,11 +402,14 @@ def detect_platform(text: str) -> str:
     n = normalize(text)
     if "微信支付" in n or "wxpay" in n or ("微信" in n and "支付" in n):
         return "wechat"
+    # 「零钱」是微信独有的说法（支付宝叫余额宝 / 余额）
+    if "零钱" in n:
+        return "wechat"
     if "支付宝" in n or "alipay" in n or "花呗" in n or "余额宝" in n:
         return "alipay"
     if "云闪付" in n or "银联" in n:
         return "unionPay"
-    if "applepay" in n or "applepay" in n:
+    if "applepay" in n:
         return "applePay"
     if any(x in n for x in ["储蓄卡", "信用卡", "借记卡"]):
         return "bankCard"
@@ -398,14 +421,66 @@ def extract_order_number(text: str) -> str:
     return m.group(1) if m else ""
 
 
+def _match_date(text: str):
+    m = re.search(DATE_PATTERN, text)
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4) or 0))
+
+
 def extract_date(text: str):
-    m = re.search(r"(\d{4})\s*[-/年.]\s*(\d{1,2})\s*[-/月.]\s*(\d{1,2})\s*日?\s*(?:(\d{1,2})[:：](\d{2}))?", text)
-    if m:
-        return (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4) or 0)), True
+    # 1) 带标签的时间优先：收款时间 / 支付时间 / 交易时间……
+    for label in PREFERRED_TIME_LABELS:
+        pos = text.find(label)
+        if pos < 0:
+            continue
+        found = _match_date(text[pos + len(label): pos + len(label) + 48])
+        if found:
+            return found, True
+    # 2) 全文第一个完整日期
+    found = _match_date(text)
+    if found:
+        return found, True
+    # 3) 只有时间
     m = re.search(r"(\d{1,2})[:：](\d{2})(?::\d{2})?", text)
     if m:
         return (0, 0, 0, int(m.group(1))), True
     return (0, 0, 0, 0), False
+
+
+def is_block_title(line: str) -> bool:
+    text = line.strip()
+    if not (2 <= len(text) <= 12):
+        return False
+    if "¥" in text or "￥" in text:
+        return False
+    if any(ch.isdigit() for ch in text):
+        return False
+    n = normalize(text)
+    for keyword in BLOCK_TITLE_KEYWORDS:
+        k = normalize(keyword)
+        if not k:
+            continue
+        if n == k or (n.endswith(k) and len(text) <= len(k) + 2):
+            return True
+    return False
+
+
+def split_blocks(lines):
+    blocks, current, has_title = [], [], False
+    for line in lines:
+        titled = is_block_title(line)
+        if titled and has_title:
+            blocks.append(current)
+            current = [line]
+            has_title = True
+        else:
+            current.append(line)
+            if titled:
+                has_title = True
+    if current:
+        blocks.append(current)
+    return blocks
 
 
 def overall_confidence(r) -> float:
@@ -429,11 +504,21 @@ def overall_confidence(r) -> float:
 
 def parse(text: str):
     lines = [l.strip() for l in text.splitlines() if l.strip()]
-    joined = "\n".join(lines)
+
+    blocks = split_blocks(lines)
+    # 只有真正带金额的块才算一笔，避免 OCR 把标题重复一行就误判成两笔
+    receipt_blocks = [b for b in blocks if any(amount_tokens(cleaned(l)) for l in b)]
+    is_multi = len(receipt_blocks) > 1
+    scope = receipt_blocks[0] if is_multi else lines
+    joined = "\n".join(scope)
+
     kind, kind_conf, reason = detect_kind(joined)
-    amount, amount_notes = extract_amount(lines)
-    merchant, merchant_notes = extract_merchant(lines)
+    amount, amount_notes = extract_amount(scope)
+    merchant, merchant_notes = extract_merchant(scope)
     date, date_parsed = extract_date(joined)
+    notes = []
+    if is_multi:
+        notes.append("检测到 %d 笔记录，只解析最上面一笔；要记其他笔请单独截图" % len(receipt_blocks))
     r = {
         "kind": kind,
         "kind_conf": kind_conf,
@@ -441,11 +526,12 @@ def parse(text: str):
         "amount": amount,
         "merchant": merchant,
         "platform": detect_platform(joined),
-        "account": "",
+        "account": "零钱" if "零钱" in joined else "",
         "order": extract_order_number(joined),
         "date": date,
         "date_parsed": date_parsed,
-        "notes": ["收支方向：" + reason] + amount_notes + merchant_notes,
+        "blocks": len(receipt_blocks),
+        "notes": notes + ["收支方向：" + reason] + amount_notes + merchant_notes,
     }
     r["confidence"] = overall_confidence(r)
     return r
@@ -584,6 +670,51 @@ def _(r):
 1427 4516 0226 0221 1009 7341 6262 5342 9895""")
 def _(r):
     return [("金额(分)", r["amount"], 350)]
+
+
+# ---------------------------------------------------------------- 真机截图样本
+
+
+@case("截图·相册里两笔（转账7300 + 支付6251）", """10:17
+转账成功
+¥7300.00
+10:40
+支付成功
+¥6251.00""")
+def _(r):
+    return [
+        ("识别到笔数", r["blocks"], 2),
+        ("金额(分)", r["amount"], 730000),
+        ("收支方向", r["kind"], "expense"),
+        ("商户为空", r["merchant"], ""),
+    ]
+
+
+@case("截图·收款到账 1000（你已收款）", """你已收款，资金已存入零钱
+¥1000.00
+零钱余额
+转账时间 2026年07月29日 09:17:55
+收款时间 2026年07月29日 10:28:27""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 100000),
+        ("收支方向", r["kind"], "income"),
+        ("商户为空", r["merchant"], ""),
+        ("取收款时间", r["date"], (2026, 7, 29, 10)),
+        ("平台", r["platform"], "wechat"),
+    ]
+
+
+@case("截图·药店支付 96", """支付成功
+意民平价大药房
+¥96.00
+完成""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 9600),
+        ("收支方向", r["kind"], "expense"),
+        ("商户含「意民」", "意民" in r["merchant"], True),
+    ]
 
 
 def main():

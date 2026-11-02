@@ -95,8 +95,23 @@ enum ReceiptParser {
 
     static func parse(lines: [String], now: Date = .now) -> ParsedReceipt {
         var result = ParsedReceipt()
-        result.rawText = lines.joined(separator: "\n")
+
+        // 一张截图里可能出现两笔以上的记录（相册预览、连拍、聊天记录里的多张截图）。
+        // 这时只能取最上面那一笔——否则会出现「金额取第一笔、方向取第二笔」的错账。
+        let blocks = splitBlocks(lines)
+        // 只有真正带金额的块才算一笔，避免 OCR 把标题重复一行就误判成两笔
+        let receiptBlocks = blocks.filter { block in
+            block.contains { !amountTokens(in: cleaned($0)).isEmpty }
+        }
+        let isMulti = receiptBlocks.count > 1
+        let scope = isMulti ? (receiptBlocks.first ?? lines) : lines
+
+        result.rawText = scope.joined(separator: "\n")
         let joined = result.rawText
+
+        if isMulti {
+            result.notes.append("检测到 \(receiptBlocks.count) 笔记录，只解析最上面一笔；要记其他笔请单独截图")
+        }
 
         // 1. 收支方向
         let kindResult = detectKind(in: joined)
@@ -105,13 +120,13 @@ enum ReceiptParser {
         result.notes.append("收支方向：\(kindResult.kind.title)（置信度 \(String(format: "%.2f", kindResult.confidence))，依据：\(kindResult.reason)）")
 
         // 2. 金额
-        result.amountCents = extractAmount(lines: lines, notes: &result.notes)
+        result.amountCents = extractAmount(lines: scope, notes: &result.notes)
 
         // 3. 商户
-        result.merchant = extractMerchant(lines: lines, notes: &result.notes)
+        result.merchant = extractMerchant(lines: scope, notes: &result.notes)
 
         // 4. 商品 / 订单内容
-        result.item = extractItem(lines: lines, merchant: result.merchant)
+        result.item = extractItem(lines: scope, merchant: result.merchant)
 
         // 5. 时间
         let dateResult = extractDate(in: joined, now: now)
@@ -133,6 +148,49 @@ enum ReceiptParser {
         return result
     }
 
+    // MARK: - 多笔切分
+
+    /// 每笔记录的「标题行」：支付成功 / 转账成功 / 你已收款……
+    private static let blockTitleKeywords = [
+        "支付成功", "付款成功", "转账成功", "收款成功", "交易成功", "支付完成",
+        "退款成功", "退款到账", "收款到账", "转账到账", "扣款成功", "还款成功", "已收款"
+    ]
+
+    /// 把 OCR 行按标题切成多笔。正常小票只有一笔，返回单个 block，调用方行为不变。
+    private static func splitBlocks(_ lines: [String]) -> [[String]] {
+        var blocks: [[String]] = []
+        var current: [String] = []
+        var currentHasTitle = false
+
+        for line in lines {
+            let isTitle = isBlockTitle(line)
+            if isTitle && currentHasTitle {
+                blocks.append(current)
+                current = [line]
+                currentHasTitle = true
+            } else {
+                current.append(line)
+                if isTitle { currentHasTitle = true }
+            }
+        }
+        if !current.isEmpty { blocks.append(current) }
+        return blocks
+    }
+
+    private static func isBlockTitle(_ line: String) -> Bool {
+        let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count >= 2, text.count <= 12 else { return false }
+        // 标题行里不可能有金额或数字
+        guard !text.contains("¥"), !text.contains("￥") else { return false }
+        guard !text.contains(where: { $0.isNumber }) else { return false }
+        let normalized = TextNormalizer.normalize(text)
+        return blockTitleKeywords.contains { keyword in
+            let k = TextNormalizer.normalize(keyword)
+            guard !k.isEmpty else { return false }
+            return normalized == k || (normalized.hasSuffix(k) && text.count <= k.count + 2)
+        }
+    }
+
     // MARK: - 收支方向
 
     private static let incomeKeywords = [
@@ -142,7 +200,7 @@ enum ReceiptParser {
     ]
 
     private static let expenseKeywords = [
-        "支付成功", "付款成功", "交易成功", "已支付", "实付", "付款", "支付",
+        "支付成功", "付款成功", "交易成功", "转账成功", "已支付", "实付", "付款", "支付",
         "消费", "扣款", "支出", "转出", "已扣款", "完成支付"
     ]
 
@@ -421,7 +479,14 @@ enum ReceiptParser {
         return ""
     }
 
-    /// 商户名的最低可信标准：长度合理、可读字符占比够、不是纯标签词
+    /// 商户名不会带句读，也不会包含这些动作词——带这些的多半是页面上的提示语
+    private static let sentenceMarks: [Character] = ["，", "。", "！", "？", "；", ",", "!", "?", ";", "、"]
+    private static let sentenceWords = [
+        "已收款", "资金", "存入", "已存入", "请", "点击", "已到账", "注意",
+        "支付成功", "转账成功", "收款成功", "交易成功"
+    ]
+
+    /// 商户名的最低可信标准：长度合理、可读字符占比够、不是纯标签词、不是一句话
     private static func isPlausibleMerchant(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, trimmed.count <= 40 else { return false }
@@ -431,6 +496,9 @@ enum ReceiptParser {
         // 「商户单号 123456」这类标签行会被前缀匹配误当成商户，这里直接排除
         let blockedTokens = ["单号", "编号", "流水", "凭证", "订单号", "交易号"]
         if blockedTokens.contains(where: { trimmed.contains($0) }) { return false }
+        // 整句提示语（「你已收款，资金已存入零钱」）不是商户
+        if trimmed.contains(where: { sentenceMarks.contains($0) }) { return false }
+        if sentenceWords.contains(where: { trimmed.contains($0) }) { return false }
 
         let scalars = Array(trimmed.unicodeScalars)
         let readable = scalars.filter {
@@ -495,27 +563,32 @@ enum ReceiptParser {
 
     // MARK: - 时间
 
+    /// 带标签的时间比页面上随便一个日期更可信；「收款时间」排在「转账时间」前面，
+    /// 因为到账页里转账是发起时刻，收款才是这笔钱真正入账的时刻。
+    private static let preferredTimeLabels = [
+        "收款时间", "支付时间", "付款时间", "交易时间", "扣款时间", "转账时间", "创建时间"
+    ]
+
+    private static let datePattern = #"(\d{4})\s*[-/年.]\s*(\d{1,2})\s*[-/月.]\s*(\d{1,2})\s*日?\s*(?:(\d{1,2})[:：](\d{2}))?"#
+
     private static func extractDate(in text: String, now: Date) -> (date: Date, parsed: Bool) {
         let calendar = Calendar(identifier: .gregorian)
-        let pattern = #"(\d{4})\s*[-/年.]\s*(\d{1,2})\s*[-/月.]\s*(\d{1,2})\s*日?\s*(?:(\d{1,2})[:：](\d{2}))?"#
 
-        if let match = RegexHelper.firstMatch(pattern, in: text),
-           match.groups.count >= 3,
-           let year = Int(match.groups[0] ?? ""),
-           let month = Int(match.groups[1] ?? ""),
-           let day = Int(match.groups[2] ?? "") {
-            var comps = DateComponents()
-            comps.year = year
-            comps.month = month
-            comps.day = day
-            comps.hour = Int(match.groups.count > 3 ? (match.groups[3] ?? "0") : "0") ?? 0
-            comps.minute = Int(match.groups.count > 4 ? (match.groups[4] ?? "0") : "0") ?? 0
-            if let date = calendar.date(from: comps), date <= now.addingTimeInterval(86_400) {
+        // 1) 带标签的时间：收款时间 / 支付时间 / 交易时间……
+        for label in preferredTimeLabels {
+            guard let labelRange = text.range(of: label) else { continue }
+            let tail = String(text[labelRange.upperBound...].prefix(48))
+            if let date = parseDate(from: tail, calendar: calendar, now: now) {
                 return (date, true)
             }
         }
 
-        // 只有时间（例如「14:32」）：用今天 + 该时间
+        // 2) 全文第一个完整日期
+        if let date = parseDate(from: text, calendar: calendar, now: now) {
+            return (date, true)
+        }
+
+        // 3) 只有时间（例如「14:32」）：用今天 + 该时间
         if let timeMatch = RegexHelper.firstMatch(#"(\d{1,2})[:：](\d{2})(?::\d{2})?"#, in: text) {
             let hourText: String? = timeMatch.groups.first ?? nil
             let minuteText: String? = timeMatch.groups.count > 1 ? (timeMatch.groups[1] ?? nil) : nil
@@ -531,7 +604,7 @@ enum ReceiptParser {
             }
         }
 
-        // NSDataDetector 兜底
+        // 4) NSDataDetector 兜底
         if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) {
             let range = NSRange(text.startIndex..., in: text)
             if let result = detector.firstMatch(in: text, options: [], range: range),
@@ -543,11 +616,36 @@ enum ReceiptParser {
         return (now, false)
     }
 
+    /// 从一段文本里取出第一个「年月日 [时分]」并校验合理性
+    private static func parseDate(from text: String, calendar: Calendar, now: Date) -> Date? {
+        guard let match = RegexHelper.firstMatch(datePattern, in: text),
+              match.groups.count >= 3,
+              let year = Int(match.groups[0] ?? ""),
+              let month = Int(match.groups[1] ?? ""),
+              let day = Int(match.groups[2] ?? "") else {
+            return nil
+        }
+        var comps = DateComponents()
+        comps.year = year
+        comps.month = month
+        comps.day = day
+        comps.hour = Int(match.groups.count > 3 ? (match.groups[3] ?? "0") : "0") ?? 0
+        comps.minute = Int(match.groups.count > 4 ? (match.groups[4] ?? "0") : "0") ?? 0
+        guard let date = calendar.date(from: comps), date <= now.addingTimeInterval(86_400) else {
+            return nil
+        }
+        return date
+    }
+
     // MARK: - 平台
 
     private static func detectPlatform(in text: String) -> PaymentPlatform {
         let lowered = TextNormalizer.normalize(text)
         if lowered.contains("微信支付") || lowered.contains("wxpay") || lowered.contains("微信") && lowered.contains("支付") {
+            return .wechat
+        }
+        // 「零钱」是微信独有的说法（支付宝叫余额宝 / 余额）
+        if lowered.contains("零钱") {
             return .wechat
         }
         if lowered.contains("支付宝") || lowered.contains("alipay") || lowered.contains("花呗") || lowered.contains("余额宝") {
@@ -579,6 +677,9 @@ enum ReceiptParser {
                      "民生银行", "浦发银行", "兴业银行", "中信银行", "光大银行", "平安银行"]
         if let bank = banks.first(where: { text.contains($0) }) {
             return bank
+        }
+        if text.contains("零钱") {
+            return "零钱"
         }
         return ""
     }
