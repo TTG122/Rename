@@ -523,12 +523,14 @@ enum ReceiptParser {
 
         // 3) 个人转账：微信「扫二维码付款-给みや」「转账给张三」，收款人是个人昵称
         let payeePattern = #"(?:付款|转账|收款)[-—－]?\s*给\s*([^，。、,;；\s]{1,20})"#
-        if let match = RegexHelper.firstMatch(payeePattern, in: lines.joined(separator: "\n")),
-           let rawValue = match.groups.first ?? nil {
-            let name = cleanMerchant(rawValue)
-            if isPlausibleMerchant(name) {
-                notes.append("商户来源：付款对象「给\(name)」")
-                return name
+        if let match = RegexHelper.firstMatch(payeePattern, in: lines.joined(separator: "\n")) {
+            let rawValue: String? = match.groups.first ?? nil
+            if let payee = rawValue {
+                let name = cleanMerchant(payee)
+                if isPlausibleMerchant(name) {
+                    notes.append("商户来源：付款对象「给\(name)」")
+                    return name
+                }
             }
         }
 
