@@ -154,6 +154,11 @@ enum ImportService {
         var score: Int = 0
     }
 
+    /// 没有「收/支」列时（银行流水、通用 CSV），用摘要 / 备注判断方向
+    private static let incomeHints = [
+        "工资", "薪资", "奖金", "收入", "转入", "收款", "退款", "退货", "利息", "分红", "报销", "红包"
+    ]
+
     private static let keywordSets: [(keyPath: WritableKeyPath<ColumnMap, Int?>, keywords: [String])] = [
         (\.dateTime, ["交易时间", "交易日期", "付款时间", "记账时间", "日期", "时间"]),
         (\.kind, ["收/支", "收支类型", "收支", "类型", "借贷标志"]),
@@ -166,6 +171,9 @@ enum ImportService {
         (\.note, ["备注"]),
         (\.status, ["当前状态", "交易状态", "状态"])
     ]
+
+    /// 表头里带这些字的列是「余额」类字段，不能当金额或支付账户用
+    private static let balanceHeaderWords = ["余额", "额度"]
 
     private static func detectColumns(rows: [[String]]) -> ColumnMap? {
         var best: ColumnMap?
@@ -185,16 +193,16 @@ enum ImportService {
                 for keyword in entry.keywords {
                     let key = TextNormalizer.normalize(keyword)
                     guard !key.isEmpty else { continue }
-                    if let column = normalizedRow.firstIndex(of: key) {
-                        matched = column
-                        break
-                    }
+                    guard let column = normalizedRow.firstIndex(of: key) else { continue }
+                    guard !isBalanceHeader(normalizedRow[column]) else { continue }
+                    matched = column
+                    break
                 }
 
                 // 第二轮：找不到完全一致的，再退化为包含匹配（兼容「金额(元)」「收/支金额」这类写法）
                 if matched == nil {
                     for (columnIndex, cell) in normalizedRow.enumerated() {
-                        guard !cell.isEmpty else { continue }
+                        guard !cell.isEmpty, !isBalanceHeader(cell) else { continue }
                         let hit = entry.keywords.contains { keyword in
                             let key = TextNormalizer.normalize(keyword)
                             return !key.isEmpty && cell.contains(key)
@@ -220,6 +228,11 @@ enum ImportService {
             }
         }
         return best
+    }
+
+    /// 「账户余额」「可用额度」这类列不是收支字段
+    private static func isBalanceHeader(_ normalizedCell: String) -> Bool {
+        balanceHeaderWords.contains { normalizedCell.contains(TextNormalizer.normalize($0)) }
     }
 
     private static func detectFormat(rows: [[String]]) -> String {
@@ -266,8 +279,13 @@ enum ImportService {
                 continue
             }
             var kind: TransactionKind = .expense
-            if kindText.contains("收入") || kindText.contains("收款") || kindText.contains("转入") {
+            if kindText.contains("收入") || kindText.contains("收款") || kindText.contains("转入")
+                || kindText.contains("贷") {
                 kind = .income
+            } else if kindText.isEmpty, map.kind == nil {
+                // 银行流水常常没有「收/支」列，只能从摘要 / 备注判断（「工资」「退款」）
+                let hint = [value(\.item), value(\.note), value(\.merchant)].joined(separator: " ")
+                if incomeHints.contains(where: { hint.contains($0) }) { kind = .income }
             }
 
             // 状态过滤：只跳过「钱没动」的行。

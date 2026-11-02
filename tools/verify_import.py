@@ -137,6 +137,15 @@ def normalize(text: str) -> str:
     return s
 
 
+BALANCE_HEADER_WORDS = ["余额", "额度"]
+INCOME_HINTS = ["工资", "薪资", "奖金", "收入", "转入", "收款", "退款", "退货",
+                "利息", "分红", "报销", "红包"]
+
+
+def is_balance_header(cell: str) -> bool:
+    return any(normalize(w) in cell for w in BALANCE_HEADER_WORDS)
+
+
 def detect_columns(rows, legacy=False):
     best = None
     for row_index, row in enumerate(rows[:40]):
@@ -147,14 +156,16 @@ def detect_columns(rows, legacy=False):
             if not legacy:
                 for keyword in keywords:
                     k = normalize(keyword)
-                    if not k:
+                    if not k or k not in normalized_row:
                         continue
-                    if k in normalized_row:
-                        matched = normalized_row.index(k)
-                        break
+                    column = normalized_row.index(k)
+                    if is_balance_header(normalized_row[column]):
+                        continue
+                    matched = column
+                    break
             if matched is None:
                 for column_index, cell in enumerate(normalized_row):
-                    if not cell:
+                    if not cell or is_balance_header(cell):
                         continue
                     if any(normalize(kw) and normalize(kw) in cell for kw in keywords):
                         matched = column_index
@@ -286,8 +297,12 @@ def build(rows, legacy=False):
                 result["neutral"] += 1
                 continue
             kind = "expense"
-            if "收入" in kind_text or "收款" in kind_text or "转入" in kind_text:
+            if any(k in kind_text for k in ("收入", "收款", "转入", "贷")):
                 kind = "income"
+            elif not kind_text and "kind" not in mapping:
+                hint = " ".join([value("item"), value("note"), value("merchant")])
+                if any(h in hint for h in INCOME_HINTS):
+                    kind = "income"
             status = clean_cell(value("status"))
             if any(dead in status for dead in ["交易关闭", "已关闭", "支付失败", "交易失败",
                                                "已撤销", "已取消", "已失效"]):
