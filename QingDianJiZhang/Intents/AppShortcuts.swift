@@ -9,8 +9,6 @@
 import AppIntents
 
 struct QingDianAppShortcuts: AppShortcutsProvider {
-    static var shortcutTileColor: ShortcutTileColor = .green
-
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: RecordFromImageIntent(),

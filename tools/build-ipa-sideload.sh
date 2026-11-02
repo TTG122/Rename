@@ -54,24 +54,46 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-PAYLOAD="${BUILD_DIR}/Payload-sideload"
-rm -rf "$PAYLOAD"
-mkdir -p "$PAYLOAD"
-cp -R "$APP_PATH" "$PAYLOAD/"
+# IPA 规范要求压缩包里必须有一个「名字就叫 Payload」的目录。
+# 所以在 staging 目录里造 Payload/，再 cd 进 staging 打包，
+# 保证 zip 里第一条路径是 Payload/，不是 Payload-sideload/。
+ROOT_DIR="$(pwd)"
+STAGE="${BUILD_DIR}/sideload-stage"
+IPA_PATH="${ROOT_DIR}/${BUILD_DIR}/轻点记账-sideload.ipa"
+rm -rf "$STAGE"
+mkdir -p "${STAGE}/Payload"
+cp -R "$APP_PATH" "${STAGE}/Payload/"
+
+APP_IN_STAGE="${STAGE}/Payload/${PROJECT_NAME}.app"
 
 echo "==> 移除内嵌扩展（自签环境不支持带 entitlements 的 appex）"
-rm -rf "${PAYLOAD}/${PROJECT_NAME}.app/PlugIns"
+rm -rf "${APP_IN_STAGE}/PlugIns"
 
 echo "==> 清理旧签名残留"
-rm -rf "${PAYLOAD}/${PROJECT_NAME}.app/_CodeSignature"
-rm -f  "${PAYLOAD}/${PROJECT_NAME}.app/embedded.mobileprovision"
+rm -rf "${APP_IN_STAGE}/_CodeSignature"
+rm -f  "${APP_IN_STAGE}/embedded.mobileprovision"
 
 echo "==> 打包"
-rm -f "${BUILD_DIR}/轻点记账-sideload.ipa"
-(cd "$BUILD_DIR" && zip -qry "轻点记账-sideload.ipa" Payload-sideload)
-mv "${BUILD_DIR}/轻点记账-sideload.ipa" "${BUILD_DIR}/轻点记账-sideload.ipa"
+rm -f "${IPA_PATH}"
+# 注意：这里必须用绝对路径。因为 zip 在 $STAGE 里执行，
+# 相对路径 build/... 会解析成 build/sideload-stage/build/... 从而失败。
+(cd "$STAGE" && zip -qry "${IPA_PATH}" Payload)
 
-echo "==> 完成：${BUILD_DIR}/轻点记账-sideload.ipa"
+echo "==> 校验包结构"
+FIRST_ENTRY="$(unzip -Z1 "${IPA_PATH}" | head -1)"
+echo "    首条路径: ${FIRST_ENTRY}"
+if [ "${FIRST_ENTRY#Payload/}" = "${FIRST_ENTRY}" ]; then
+  echo "!! 包结构不对：顶层目录必须是 Payload/，实际是 ${FIRST_ENTRY}"
+  exit 1
+fi
+if ! unzip -Z1 "${IPA_PATH}" | grep -q "^Payload/${PROJECT_NAME}.app/Info.plist$"; then
+  echo "!! 包结构不对：缺少 Payload/${PROJECT_NAME}.app/Info.plist"
+  exit 1
+fi
+echo "    结构 OK"
+
+echo "==> 完成：${IPA_PATH}"
+ls -lh "${IPA_PATH}"
 echo ""
 echo "下一步（任选一种自签工具）："
 echo "  1. Sideloadly   https://sideloadly.io      —— Windows / macOS 都能用，最省事"

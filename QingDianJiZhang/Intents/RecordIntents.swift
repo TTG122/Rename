@@ -69,17 +69,17 @@ struct RecordFromImageIntent: AppIntent {
     }
 
     @MainActor
-    private func dialogText(for outcome: CapturePipeline.Outcome) -> String {
+    private func dialogText(for outcome: CapturePipeline.Outcome) -> IntentDialog {
         switch outcome {
         case .saved(let transaction):
-            return "已记账 ¥\(MoneyFormatter.string(cents: transaction.amountCents))，分类：\(transaction.categoryName)"
+            return IntentDialog(stringLiteral: "已记账 ¥\(MoneyFormatter.string(cents: transaction.amountCents))，分类：\(transaction.categoryName)")
         case .needsConfirmation(let draft):
             if draft.amountCents > 0 {
-                return "识别到 ¥\(draft.amountText)，请确认分类"
+                return IntentDialog(stringLiteral: "识别到 ¥\(draft.amountText)，请确认分类")
             }
-            return "没识别到金额，请在面板里手动填写"
+            return IntentDialog(stringLiteral: "没识别到金额，请在面板里手动填写")
         case .failed(let message):
-            return "识别失败：\(message)"
+            return IntentDialog(stringLiteral: "识别失败：\(message)")
         }
     }
 }
