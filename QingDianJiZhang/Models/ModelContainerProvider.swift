@@ -79,7 +79,6 @@ enum ModelContainerProvider {
 
 // MARK: - 首次启动初始化
 
-@MainActor
 enum SeedData {
     static func prepare(context: ModelContext) {
         seedCategoriesIfNeeded(context: context)
