@@ -67,7 +67,6 @@ enum ImportService {
             )
         )
         if let gbk = String(data: data, encoding: gb18030) { return gbk }
-        if let big5 = String(data: data, encoding: .big5) { return big5 }
         return nil
     }
 
