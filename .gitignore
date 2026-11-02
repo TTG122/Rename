@@ -14,3 +14,11 @@ __pycache__/
 
 # 本地导出
 *.zip
+
+# CI 调试时下载的临时日志 / 接口返回（不要提交）
+*.log
+gh_*.json
+runs.json
+jobs.json
+j[0-9]*.json
+last_run.json
