@@ -42,6 +42,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Normalize repo layout
+        # 兼容「网页拖拽上传」导致的两种意外：
+        #   ① 文件被套进上一级文件夹（例如 简记/...）
+        #   ② 隐藏文件缺失
+        # 这一步会把嵌套目录的内容摊平到仓库根目录，后续所有相对路径就都对了。
+        run: |
+          set -e
+          for d in */ ; do
+            name="${d%/}"
+            if [ -f "${name}/QingDianJiZhang.xcodeproj/project.pbxproj" ]; then
+              echo "检测到嵌套工程目录：${name}，正在摊平到仓库根目录"
+              shopt -s dotglob nullglob
+              cp -Rn "${name}/." . || true
+              rm -rf "${name}"
+            fi
+          done
+          ls -1
+
       - name: Select latest stable Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
