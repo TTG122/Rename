@@ -29,6 +29,8 @@ struct TransactionDraft: Identifiable, Equatable {
     var confidence: Double = 0
     /// 收支方向是否足够确定（false 时先让用户选收入/支出）
     var kindIsCertain: Bool = true
+    /// 金额是否足够确定（false 时不自动入账，界面上提示确认）
+    var amountIsCertain: Bool = true
 
     var imageHash: String = ""
     var perceptualHash: String = ""
@@ -65,6 +67,7 @@ struct TransactionDraft: Identifiable, Equatable {
         draft.kind = parsed.kind
         draft.kindIsCertain = parsed.kindConfidence >= 0.7
         draft.amountCents = parsed.amountCents ?? 0
+        draft.amountIsCertain = parsed.amountIsCertain
         draft.merchant = parsed.merchant
         draft.item = parsed.item
         draft.occurredAt = parsed.occurredAt

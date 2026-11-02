@@ -10,6 +10,19 @@
 //
 
 import Foundation
+import CoreGraphics
+
+// MARK: - 版面信息
+
+/// 一行文字在截图里的「版面位置」。Vision 已经给了 boundingBox，
+/// 用它可以把状态栏、页脚、小字说明和「大字号主金额」区分开——
+/// 只靠文字内容判断的话，状态栏的电量「4」会被当成金额。
+struct ReceiptLayoutHint {
+    /// 文字高度（相对图片高度的比例，例如 0.03 表示占屏高 3%）
+    let height: CGFloat
+    /// 距图片顶部的距离（0 = 最上边）
+    let topY: CGFloat
+}
 
 // MARK: - 解析结果
 
@@ -19,6 +32,8 @@ struct ParsedReceipt {
     var kindConfidence: Double = 0.0
 
     var amountCents: Int?
+    /// 金额是否可信。不可信时不自动入账，让用户先确认。
+    var amountIsCertain: Bool = true
     var merchant: String = ""
     var item: String = ""
     var occurredAt: Date = .now
@@ -96,7 +111,9 @@ enum ReceiptParser {
     // MARK: 主入口
 
     static func parse(document: OCRDocument, now: Date = .now) -> ParsedReceipt {
-        parse(lines: document.orderedLines.map(\.text), now: now)
+        let ordered = document.orderedLines
+        let layouts = ordered.map { ReceiptLayoutHint(height: $0.height, topY: $0.topDownY) }
+        return parse(lines: ordered.map(\.text), layouts: layouts, now: now)
     }
 
     static func parse(text: String, now: Date = .now) -> ParsedReceipt {
@@ -104,10 +121,14 @@ enum ReceiptParser {
             .components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        return parse(lines: lines, now: now)
+        return parse(lines: lines, layouts: nil, now: now)
     }
 
     static func parse(lines: [String], now: Date = .now) -> ParsedReceipt {
+        parse(lines: lines, layouts: nil, now: now)
+    }
+
+    static func parse(lines: [String], layouts: [ReceiptLayoutHint]?, now: Date = .now) -> ParsedReceipt {
         var result = ParsedReceipt()
 
         // 先把 OCR 里的排版符号归一化：微信账单页的「−50.00」用的是 U+2212 减号，
@@ -139,7 +160,10 @@ enum ReceiptParser {
         result.notes.append("收支方向：\(kindResult.kind.title)（置信度 \(String(format: "%.2f", kindResult.confidence))，依据：\(kindResult.reason)）")
 
         // 2. 金额
-        result.amountCents = extractAmount(lines: scope, notes: &result.notes)
+        let scopeLayouts: [ReceiptLayoutHint]? = isMulti ? nil : layouts
+        let amountResult = extractAmount(lines: scope, layouts: scopeLayouts, notes: &result.notes)
+        result.amountCents = amountResult.cents
+        result.amountIsCertain = amountResult.certain
 
         // 3. 商户
         result.merchant = extractMerchant(lines: scope, notes: &result.notes)
@@ -371,7 +395,25 @@ enum ReceiptParser {
         }
     }
 
-    private static func extractAmount(lines: [String], notes: inout [String]) -> Int? {
+    private struct AmountResult {
+        let cents: Int?
+        /// 金额是否可信：拿到的是「整行金额」「带符号金额」「高权重账单字段」才算
+        let certain: Bool
+    }
+
+    /// 状态栏：位于最顶部、且字号很小的那些行（时间、电量、信号、运营商）。
+    /// 它们会被 OCR 当成正文读出来，绝不能参与金额计算。
+    private static func isStatusBarLine(index: Int, layouts: [ReceiptLayoutHint]?) -> Bool {
+        guard let layouts, index < layouts.count else { return false }
+        let hint = layouts[index]
+        return hint.topY < 0.06 && hint.height < 0.028
+    }
+
+    private static func extractAmount(
+        lines: [String],
+        layouts: [ReceiptLayoutHint]?,
+        notes: inout [String]
+    ) -> AmountResult {
         struct Candidate {
             let cents: Int
             let score: Int
@@ -389,7 +431,24 @@ enum ReceiptParser {
         /// 标签和金额分两行时的待定权重：「实付」换行写「¥36.00」
         var pendingLabel: (keyword: String, weight: Int)?
 
+        // 版面：正文里「字号明显偏大」的那一行几乎就是主金额，先算出中位字号做基准
+        var bodyHeights: [CGFloat] = []
+        if let layouts {
+            for (index, hint) in layouts.enumerated() where index < lines.count {
+                if isStatusBarLine(index: index, layouts: layouts) { continue }
+                if !amountTokens(in: cleaned(lines[index])).isEmpty { bodyHeights.append(hint.height) }
+            }
+        }
+        bodyHeights.sort()
+        let medianHeight: CGFloat = bodyHeights.isEmpty ? 0 : bodyHeights[bodyHeights.count / 2]
+
         for (index, line) in lines.enumerated() {
+            // 状态栏里的时间/电量/信号直接跳过（这是「50 元记成 4 元」的根源）
+            if isStatusBarLine(index: index, layouts: layouts) {
+                notes.append("跳过状态栏行：\(line)")
+                continue
+            }
+
             let clean = cleaned(line)
             guard !clean.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
 
@@ -440,9 +499,16 @@ enum ReceiptParser {
             let trimmed = clean.trimmingCharacters(in: .whitespacesAndNewlines)
             let singleToken = tokens.count == 1 ? tokens[0] : nil
 
+            // 字号明显大于正文的那一行，是账单里「大数字金额」的典型排版，加分
+            var visualBonus = 0
+            if let layouts, index < layouts.count, medianHeight > 0,
+               layouts[index].height >= medianHeight * 1.45 {
+                visualBonus = 26
+            }
+
             if let token = singleToken, !lineIsDiscount, !isBalance(token),
                RegexHelper.contains(signedLinePattern, in: trimmed) {
-                candidates.append(Candidate(cents: token.cents, score: 98, source: line))
+                candidates.append(Candidate(cents: token.cents, score: 98 + visualBonus, source: line))
             }
 
             // 整行只有一个金额：这是中国支付回执里最核心的那一行（大字号主金额），
@@ -458,6 +524,7 @@ enum ReceiptParser {
                RegexHelper.contains(pureAmountPattern, in: trimmed) {
                 var score = 96
                 if index <= 2 { score += 4 }
+                score += visualBonus
                 // 上一行是「实付」这类标签时，本行直接按那个标签的权重算
                 if let pending = pendingLabel {
                     let inherited = pending.weight + (token.hasSymbol ? 6 : 0)
@@ -494,7 +561,12 @@ enum ReceiptParser {
 
         if let best = candidates.max(by: { $0.score < $1.score }), best.score > 0 {
             notes.append("金额来源：\(best.source)（权重 \(best.score)）")
-            return best.cents
+            // 权重低于 96 说明是从某段文字后面的数字推出来的，不敢当成确定值
+            let certain = best.score >= 96
+            if !certain {
+                notes.append("金额置信度偏低，请确认")
+            }
+            return AmountResult(cents: best.cents, certain: certain)
         }
 
         // 兜底不再「取全文最大数字」：只接受带货币符号、带「元」或带小数的金额。
@@ -502,10 +574,11 @@ enum ReceiptParser {
         let usable = safeTokens.filter { $0.hasSymbol || $0.hasYuanSuffix || $0.hasFraction }
         if let best = usable.max(by: { $0.cents < $1.cents }) {
             notes.append("金额兜底：取带符号或小数的最大金额 \(MoneyFormatter.string(cents: best.cents))")
-            return best.cents
+            notes.append("金额置信度偏低，请确认")
+            return AmountResult(cents: best.cents, certain: false)
         }
         notes.append("未识别到可信金额，请手动填写")
-        return nil
+        return AmountResult(cents: nil, certain: false)
     }
 
     /// 判断某个金额是否属于「余额」：可能是上一行的「余额」标签，也可能是同一行里

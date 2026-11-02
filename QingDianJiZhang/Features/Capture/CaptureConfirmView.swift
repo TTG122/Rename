@@ -145,6 +145,11 @@ struct CaptureConfirmView: View {
                 Text("没识别到金额，点上方数字手动填写")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.expense)
+            } else if !draft.amountIsCertain {
+                // 金额是从不确定的位置推出来的（例如页面上有多处数字），提示先核对
+                Text("金额不太确定，点数字可以改")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.expense)
             }
         }
         .frame(maxWidth: .infinity)

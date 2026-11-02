@@ -125,8 +125,10 @@ enum CapturePipeline {
         }
 
         // 智能自动模式判定
+        // 金额不确定时绝不自动入账——宁可多问一句，也不要替你记一笔错账
         let isAuto = settings.recordMode == .smartAuto
             && draft.kindIsCertain
+            && draft.amountIsCertain
             && draft.confidence >= settings.autoThreshold
 
         guard isAuto else {

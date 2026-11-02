@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import CoreGraphics
 @testable import QingDianJiZhang
 
 final class ReceiptParserTests: XCTestCase {
@@ -446,5 +447,66 @@ final class ReceiptParserTests: XCTestCase {
     func testBareIntegerIsNotAmount() {
         let result = ReceiptParser.parse(text: "支付成功\n72\n完成")
         XCTAssertNil(result.amountCents)
+    }
+
+    // MARK: - 版面（字号 / 位置）
+
+    /// topY = 距顶部比例，height = 相对屏高
+    private func line(_ text: String, topY: CGFloat, height: CGFloat) -> OCRLine {
+        OCRLine(
+            text: text,
+            confidence: 0.9,
+            boundingBox: CGRect(x: 0.1, y: 1 - topY - height, width: 0.8, height: height)
+        )
+    }
+
+    /// 有版面信息时，状态栏（最顶部 + 小字号）整体跳过，
+    /// 大字号的那一行拿版面加分——这是「只靠文字判断」补不上的那层保险。
+    func testStatusBarIsSkippedWithLayout() {
+        let doc = OCRDocument(
+            lines: [
+                line("14:16", topY: 0.020, height: 0.016),
+                line("4", topY: 0.030, height: 0.014),
+                line("账单", topY: 0.070, height: 0.017),
+                line("扫二维码付款-给文文", topY: 0.190, height: 0.017),
+                line("-50.00", topY: 0.240, height: 0.030),
+                line("当前状态 支付成功", topY: 0.350, height: 0.017),
+                line("支付方式 浦发银行储蓄卡（6354）", topY: 0.410, height: 0.017)
+            ],
+            imageSize: CGSize(width: 590, height: 1280),
+            imageHash: "",
+            perceptualHash: ""
+        )
+        let result = ReceiptParser.parse(document: doc)
+        XCTAssertEqual(result.amountCents, 5000, "状态栏的 4 必须被跳过")
+        XCTAssertTrue(result.amountIsCertain)
+        XCTAssertTrue(result.notes.contains { $0.contains("状态栏") }, "识别详情里应说明跳过了状态栏")
+    }
+
+    /// 大字号金额压过「订单金额」这类说明字段
+    func testBigAmountBeatsOrderAmountField() {
+        let doc = OCRDocument(
+            lines: [
+                line("支付成功", topY: 0.050, height: 0.017),
+                line("订单金额 45.00", topY: 0.100, height: 0.017),
+                line("￥36.00", topY: 0.150, height: 0.030)
+            ],
+            imageSize: CGSize(width: 590, height: 1280),
+            imageHash: "",
+            perceptualHash: ""
+        )
+        let result = ReceiptParser.parse(document: doc)
+        XCTAssertEqual(result.amountCents, 3600, "大字号那行才是实付")
+    }
+
+    /// 金额是从低权重位置推出来的时候，要标记成「不确定」，
+    /// 这样截屏记账不会自动入账，会让用户先确认。
+    func testWeakAmountIsMarkedUncertain() {
+        let result = ReceiptParser.parse(text: """
+        支付成功
+        付款 12
+        """)
+        XCTAssertEqual(result.amountCents, 1200)
+        XCTAssertFalse(result.amountIsCertain, "只有「付款」这个弱线索时应标记为不确定")
     }
 }

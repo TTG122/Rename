@@ -231,13 +231,33 @@ SIGNED_FULL_RE = re.compile(r"^[+＋\-－]\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?\s*(
 PURE_AMOUNT_RE = re.compile(r"^[+＋\-－]?\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?\s*(?:元|块)?$")
 
 
-def extract_amount(lines):
+def extract_amount(lines, layouts=None):
+    """layouts: [(height, topY)]，相对图片尺寸的归一化值；没有版面信息时传 None。"""
     candidates = []
     safe_tokens = []
     notes = []
     pending = None  # (keyword, weight)：标签与金额分两行时，金额继承标签权重
 
+    def is_status_bar(i):
+        if not layouts or i >= len(layouts):
+            return False
+        height, top_y = layouts[i]
+        return top_y < 0.06 and height < 0.028
+
+    body_heights = []
+    if layouts:
+        for i, (height, _) in enumerate(layouts):
+            if i >= len(lines) or is_status_bar(i):
+                continue
+            if amount_tokens(cleaned(lines[i])):
+                body_heights.append(height)
+    body_heights.sort()
+    median_height = body_heights[len(body_heights) // 2] if body_heights else 0
+
     for index, line in enumerate(lines):
+        if is_status_bar(index):
+            notes.append("跳过状态栏行：" + line)
+            continue
         clean = cleaned(line)
         if not clean.strip():
             continue
@@ -284,8 +304,15 @@ def extract_amount(lines):
 
         trimmed = clean.strip()
         single = tokens[0] if len(tokens) == 1 else None
+
+        # 字号明显大于正文的行（账单里的大数字金额）加分
+        visual_bonus = 0
+        if layouts and index < len(layouts) and median_height > 0:
+            if layouts[index][0] >= median_height * 1.45:
+                visual_bonus = 26
+
         if single and not line_is_discount and not is_balance(single) and SIGNED_LINE_RE.match(trimmed):
-            candidates.append({"cents": single["cents"], "score": 98, "source": line})
+            candidates.append({"cents": single["cents"], "score": 98 + visual_bonus, "source": line})
 
         # 整行只有一个金额，是中国支付回执里的主金额行；
         # 但必须带小数 / 货币符号 / 「元」，否则状态栏电量「4」「72」这类纯整数
@@ -324,15 +351,19 @@ def extract_amount(lines):
         best = max(candidates, key=lambda c: c["score"])
         if best["score"] > 0:
             notes.append("金额来源：%s（权重 %d）" % (best["source"], best["score"]))
-            return best["cents"], notes
+            certain = best["score"] >= 96
+            if not certain:
+                notes.append("金额置信度偏低，请确认")
+            return best["cents"], notes, certain
 
     usable = [t for t in safe_tokens if t["has_symbol"] or t["has_yuan"] or t["has_frac"]]
     if usable:
         best = max(usable, key=lambda t: t["cents"])
         notes.append("金额兜底：取带符号或小数的最大金额 %.2f" % (best["cents"] / 100))
-        return best["cents"], notes
+        notes.append("金额置信度偏低，请确认")
+        return best["cents"], notes, False
     notes.append("未识别到可信金额，请手动填写")
-    return None, notes
+    return None, notes, False
 
 
 # ---------------------------------------------------------------- 商户
@@ -637,7 +668,7 @@ def overall_confidence(r) -> float:
     return min(max(score, 0.05), 0.99)
 
 
-def parse(text: str):
+def parse(text: str, layouts=None):
     lines = [normalize_symbols(l.strip()) for l in text.splitlines() if l.strip()]
 
     blocks = split_blocks(lines)
@@ -648,7 +679,7 @@ def parse(text: str):
     joined = "\n".join(scope)
 
     kind, kind_conf, reason = detect_kind(joined)
-    amount, amount_notes = extract_amount(scope)
+    amount, amount_notes, amount_certain = extract_amount(scope, None if is_multi else layouts)
     merchant, merchant_notes = extract_merchant(scope)
     date, date_parsed = extract_date(joined)
     notes = []
@@ -659,6 +690,7 @@ def parse(text: str):
         "kind_conf": kind_conf,
         "kind_reason": reason,
         "amount": amount,
+        "amount_certain": amount_certain,
         "merchant": merchant,
         "platform": detect_platform(joined),
         "account": "零钱" if "零钱" in joined else "",
@@ -1116,6 +1148,83 @@ def _(r):
     return [("金额(分)", r["amount"], None)]
 
 
+# ---------------------------------------------------------------- 版面（字号/位置）用例
+# 这些用例除了文字，还会传入每行的 (高度, 距顶部距离)，模拟 Vision 的 boundingBox。
+
+LAYOUT_CASES = []
+
+
+def layout_case(name, lines, layouts):
+    def deco(fn):
+        LAYOUT_CASES.append((name, lines, layouts, fn))
+        return fn
+    return deco
+
+
+@layout_case("版面·状态栏电量与正文同屏", [
+    "14:16", "4", "账单", "扫二维码付款-给文文", "-50.00",
+    "当前状态 支付成功", "支付方式 浦发银行储蓄卡（6354）",
+], [
+    (0.016, 0.020), (0.014, 0.030), (0.017, 0.070), (0.017, 0.190),
+    (0.030, 0.240), (0.017, 0.350), (0.017, 0.410),
+])
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 5000),
+        ("金额可信", r["amount_certain"], True),
+    ]
+
+
+@layout_case("版面·大字号金额压过订单金额", [
+    "支付成功", "订单金额 45.00", "￥36.00",
+], [
+    (0.017, 0.05), (0.017, 0.10), (0.030, 0.15),
+])
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 3600),
+        ("金额可信", r["amount_certain"], True),
+    ]
+
+
+# ---------------------------------------------------------------- 噪声语料（UI 元素不是金额）
+
+NOISE_CASES = {
+    "分页 1/3": """支付成功
+某商户
+￥36.00
+1/3""",
+    "版本号 v1.2.3": """支付成功
+某商户
+￥36.00
+版本 v1.2.3""",
+    "信号 5G": """5G
+支付成功
+某商户
+￥36.00""",
+    "电量 27%": """27%
+支付成功
+某商户
+￥36.00""",
+    "广告立减": """支付成功
+某商户
+￥36.00
+支付立减 5 元""",
+}
+
+
+def run_noise_cases():
+    ok = True
+    print("\n噪声语料（UI 元素不能当金额）")
+    for name, text in NOISE_CASES.items():
+        r = parse(text)
+        passed = r["amount"] == 3600
+        ok = ok and passed
+        print("  [%s] %-20s 金额=%r%s" % (
+            "PASS" if passed else "FAIL", name, r["amount"], "" if passed else "   期望 3600"))
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--debug", action="store_true", help="打印每条用例的判定依据")
@@ -1141,7 +1250,25 @@ def main():
                 for n in r["notes"]:
                     print("        · " + n)
     print("\n共 %d 条断言组：%d 通过，%d 失败" % (len(CASES), passed, failed))
-    return 1 if failed else 0
+
+    layout_failed = 0
+    if LAYOUT_CASES:
+        print("\n版面用例（带字号 / 位置）")
+    for name, lines, layouts, checker in LAYOUT_CASES:
+        r = parse("\n".join(lines), layouts=layouts)
+        rows = checker(r)
+        ok = all(actual == expect for _, actual, expect in rows)
+        if not ok:
+            layout_failed += 1
+        print("  [%s] %s" % ("PASS" if ok else "FAIL", name))
+        if not ok:
+            for label, actual, expect in rows:
+                flag = "" if actual == expect else "   <-- 期望 %r" % (expect,)
+                print("        %-12s %r%s" % (label, actual, flag))
+
+    noise_ok = run_noise_cases()
+    total_failed = failed + layout_failed + (0 if noise_ok else 1)
+    return 1 if total_failed else 0
 
 
 if __name__ == "__main__":
