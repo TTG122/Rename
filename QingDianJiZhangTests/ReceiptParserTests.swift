@@ -214,4 +214,164 @@ final class ReceiptParserTests: XCTestCase {
         XCTAssertEqual(result.kind, .expense)
         XCTAssertTrue(result.merchant.contains("意民"), "实际：\(result.merchant)")
     }
+
+    // MARK: - 回归：真机截图（1.1.2 修复）
+
+    /// 支付宝：页面底部广告「获得最高5元碰一下支付红包」不能盖过主金额 24.00
+    func testAlipayPromoTextIsNotAmount() {
+        let result = ReceiptParser.parse(text: """
+        12:51
+        支付成功
+        回首页
+        ¥24.00
+        *锶锶  ¥24.00
+        付款方式 支付宝小荷包(小红车)
+        支付宝积分+2 体验金+18 一键领
+        支付有礼
+        获得最高5元碰一下支付红包
+        立即领
+        丸美 小红笔眼霜4.0
+        到手超4支眼霜量 再送生日周边
+        立即购买
+        完成
+        """)
+        XCTAssertEqual(result.amountCents, 2400, "「5元」是广告文案，不是本笔金额")
+        XCTAssertEqual(result.kind, .expense)
+        XCTAssertEqual(result.merchant, "", "打码昵称与广告行都不是商户")
+    }
+
+    /// 微信扫码付款给个人：商户应是收款人昵称，不是「收款方备注 二维码收款」
+    func testPersonalQRPaymentUsesPayeeName() {
+        let result = ReceiptParser.parse(text: """
+        22:28
+        账单
+        扫二维码付款-给みや、
+        -130.00
+        当前状态 支付成功
+        收款方备注 二维码收款
+        支付方式 零钱通
+        转账时间 2026年8月12日 22:11:14
+        转账单号
+        10001073012026081200412311519112
+        """)
+        XCTAssertEqual(result.amountCents, 13000)
+        XCTAssertEqual(result.kind, .expense)
+        XCTAssertEqual(result.merchant, "みや", "收款人是个人昵称，实际：\(result.merchant)")
+    }
+
+    /// 淘宝账单：字段名是「商户简称」，不能把「简称」两个字带进商户名
+    func testMerchantShortNameLabel() {
+        let result = ReceiptParser.parse(text: """
+        21:10
+        淘宝平台商户
+        -705.00
+        当前状态 支付成功
+        支付时间 2025年10月2日 18:23:50
+        商户简称 淘宝平台商户
+        收单机构 财付通支付科技有限公司
+        支付方式 工商银行储蓄卡(0092)
+        交易单号 4440302262202510028845408022
+        """)
+        XCTAssertEqual(result.amountCents, 70500)
+        XCTAssertEqual(result.merchant, "淘宝平台商户", "实际：\(result.merchant)")
+    }
+
+    /// 转账付款页底部有「收款账户」「预计10秒内到账」，不能据此判成收入
+    func testOutgoingTransferIsExpense() {
+        let result = ReceiptParser.parse(text: """
+        完成
+        转账成功
+        预计10秒内到账，实际时间取决于收款银行。
+        转账金额 500,000.00元
+        收款账户 苏州悦贵房地产开发有限公司
+        """)
+        XCTAssertEqual(result.kind, .expense, "付款方的「转账成功」是支出")
+        XCTAssertEqual(result.amountCents, 50000000, "50 万带千分位也要能解析")
+        XCTAssertEqual(result.merchant, "苏州悦贵房地产开发有限公司", "实际：\(result.merchant)")
+    }
+
+    /// 抖音电商账单：大字号实付 16,434.42 要压过「订单金额 16435.00」
+    func testDouyinOrderAmountDoesNotWin() {
+        let result = ReceiptParser.parse(text: """
+        16:39
+        账单详情
+        抖音电商商家
+        -16,434.42
+        交易成功
+        订单金额 16435.00
+        花呗立减 -0.58
+        支付时间 2026-07-05 16:30:23
+        付款方式 余额宝 11,434.42
+        花呗 5,000.00
+        组合支付
+        收款方全称 上海格物致品网络科技有限公司
+        """)
+        XCTAssertEqual(result.amountCents, 1643442, "订单金额 16435.00 不是实付")
+        XCTAssertEqual(result.kind, .expense)
+        XCTAssertEqual(result.merchant, "上海格物致品网络科技有限公司", "实际：\(result.merchant)")
+    }
+
+    /// 抖音支付：还款金额 500 不能盖过实付 487.20；「+6抖音支付积分」不能当收入
+    func testRepaymentAmountDoesNotWin() {
+        let result = ReceiptParser.parse(text: """
+        08:17
+        支付成功
+        已提交银行处理
+        ¥487.20
+        立减优惠 -¥12.80
+        还款进度 银行处理中，预计今天到账
+        还款金额 ¥500.00
+        更多信息
+        抖音支付 笔笔返现10%
+        最高1.8元生活缴费券
+        +6抖音支付积分
+        完成
+        """)
+        XCTAssertEqual(result.amountCents, 48720, "实付 487.20，不是还款金额 500.00")
+        XCTAssertEqual(result.kind, .expense, "「+6抖音支付积分」不是带符号金额")
+        XCTAssertEqual(result.merchant, "", "返现、领券等营销行不是商户")
+    }
+
+    /// 深圳通：订单 7.00 / 立减 0.01，实付是 6.99
+    func testShenzhenTongFare() {
+        let result = ReceiptParser.parse(text: """
+        账单详情
+        深圳通
+        -6.99
+        自动付款成功
+        订单金额 ¥7.00
+        抖音支付立减 ¥0.01
+        付款方式 抖音支付(工行信用卡4735)
+        商品说明 抖音乘车码乘车-地铁2026-07-27 16:17:24
+        支付时间 2026-07-27 17:27:24
+        商户全称 深圳市深圳通有限公司
+        """)
+        XCTAssertEqual(result.amountCents, 699, "订单金额 7.00 与立减 0.01 都不是实付")
+        XCTAssertEqual(result.merchant, "深圳市深圳通有限公司", "实际：\(result.merchant)")
+    }
+
+    /// 「实付」和金额分两行写时，金额要继承标签的权重
+    func testLabelAndAmountOnSeparateLines() {
+        let result = ReceiptParser.parse(text: """
+        支付成功
+        肯德基
+        订单金额
+        ¥45.00
+        优惠
+        -¥9.00
+        实付
+        ¥36.00
+        """)
+        XCTAssertEqual(result.amountCents, 3600, "实付是 36.00，不是订单金额 45.00")
+    }
+
+    /// 银行短信：一行里同时有消费额和余额，不能把整行当余额，也不能当单号
+    func testBankSMSWithBalanceOnSameLine() {
+        let result = ReceiptParser.parse(
+            text: "您尾号1234的储蓄卡10月23日14:22消费人民币58.00元，余额1,204.20元。【招商银行】"
+        )
+        XCTAssertEqual(result.amountCents, 5800, "消费 58.00，不是余额 1,204.20")
+        XCTAssertEqual(result.kind, .expense)
+        XCTAssertEqual(result.platform, .bankCard)
+    }
 }

@@ -88,7 +88,16 @@ MERCHANT_BLACKLIST = [
     "查看账单", "安全保障", "中国大陆", "服务中心", "发票", "联系商家", "申请售后",
     "积分", "余额", "零钱", "钱包", "收款方", "付款方", "转账", "银行",
     "类型", "状态", "说明", "明细", "零钱明细", "交易详情", "退款详情", "账单详情", "全部账单",
+    "名片", "二维码收款", "二维码", "收款账户",
 ]
+
+PROMO_WORDS = [
+    "返现", "领取", "立即", "最高", "专享", "免单", "抽中", "贴纸", "红包", "优惠",
+    "抵扣", "积分", "券", "笔笔", "更多信息", "有礼", "体验金", "一键领", "查看",
+    "购买", "推荐", "到手", "周边",
+]
+
+MASKED_PREFIXES = ("*", "＊")
 
 MERCHANT_SUFFIX_HINTS = [
     "店", "餐厅", "饭馆", "超市", "公司", "有限", "酒店", "咖啡", "商城", "商行",
@@ -120,6 +129,14 @@ SENTENCE_WORDS = [
 ]
 
 PREFERRED_TIME_LABELS = ["收款时间", "支付时间", "付款时间", "交易时间", "扣款时间", "转账时间", "创建时间"]
+
+# 页面字段名 / 状态说明，不是收支方向依据（转账付款页有「收款账户」「收款银行」）
+NON_DIRECTIONAL_PHRASES = [
+    "收款账户", "收款银行", "收款方全称", "收款方名称", "收款方备注", "收款方名片", "收款方画像",
+    "收款方", "收款单位", "收款人", "付款账户", "付款银行", "付款方全称", "付款方",
+    "转账单号", "交易单号", "商户单号", "订单编号", "订单号", "二维码收款",
+    "银行处理中", "处理中",
+]
 
 DATE_PATTERN = r"(\d{4})\s*[-/年.]\s*(\d{1,2})\s*[-/月.]\s*(\d{1,2})\s*日?\s*(?:(\d{1,2})[:：](\d{2}))?"
 
@@ -168,22 +185,27 @@ def amount_tokens(text: str):
 
 
 def looks_like_order_number(text: str) -> bool:
-    digits = "".join(ch for ch in text if ch.isdigit())
-    if not digits:
+    """只看连续数字的最长一段：银行短信里多个金额拼起来超过 12 位，但不是单号。"""
+    runs = [len(m) for m in re.findall(r"\d+", text)]
+    if not runs:
         return False
-    if len(digits) >= 12:
+    longest = max(runs)
+    if longest >= 12:
         return True
     has_label = any(lab in text for lab in ["单号", "订单", "流水", "凭证", "交易号", "编号"])
-    return has_label and len(digits) >= 8
+    return has_label and longest >= 8
 
 
-SIGNED_LINE_RE = re.compile(r"^[+＋\-－]\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?$")
+SIGNED_LINE_RE = re.compile(r"^[+＋\-－]\s*[¥￥]?[\d,]+(?:\.\d{1,2})?$")
+SIGNED_FULL_RE = re.compile(r"^[+＋\-－]\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?\s*(?:元|块)?$")
+PURE_AMOUNT_RE = re.compile(r"^[+＋\-－]?\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?\s*(?:元|块)?$")
 
 
 def extract_amount(lines):
     candidates = []
     safe_tokens = []
     notes = []
+    pending = None  # (keyword, weight)：标签与金额分两行时，金额继承标签权重
 
     for index, line in enumerate(lines):
         clean = cleaned(line)
@@ -194,36 +216,73 @@ def extract_amount(lines):
             continue
         tokens = amount_tokens(clean)
         if not tokens:
+            label = clean.strip()
+            if 2 <= len(label) <= 8:
+                for kw, w in AMOUNT_KEYWORDS:
+                    if kw in label:
+                        pending = (kw, w)
+                        break
             continue
 
         lowered = normalize(clean)
         prev = normalize(lines[index - 1]) if index > 0 else ""
-        is_balance = ("余额" in lowered) or ("可用额度" in lowered) or prev in ("余额", "可用额度")
-        is_discount = is_balance or any(normalize(k) in lowered for k in DISCOUNT_KEYWORDS)
+        prev_is_balance = prev.endswith("余额") or prev == "可用额度"
+        balance_pos = clean.find("余额")
+        if balance_pos < 0:
+            balance_pos = clean.find("可用额度")
 
-        if not is_balance:
-            safe_tokens.extend(tokens)
+        def is_balance(t):
+            if prev_is_balance:
+                return True
+            if balance_pos >= 0:
+                return t["start"] >= balance_pos
+            return False
+
+        prev_is_discount_label = bool(prev) and len(prev) <= 4 and any(
+            normalize(k) in prev for k in DISCOUNT_KEYWORDS
+        )
+        line_is_discount = prev_is_discount_label or any(
+            normalize(k) in lowered for k in DISCOUNT_KEYWORDS if k != "余额"
+        )
+
+        for t in tokens:
+            if not is_balance(t):
+                safe_tokens.append(t)
 
         trimmed = clean.strip()
-        if (not is_discount) and SIGNED_LINE_RE.match(trimmed):
-            candidates.append({"cents": tokens[0]["cents"], "score": 98, "source": line})
+        single = tokens[0] if len(tokens) == 1 else None
+        if single and not line_is_discount and not is_balance(single) and SIGNED_LINE_RE.match(trimmed):
+            candidates.append({"cents": single["cents"], "score": 98, "source": line})
+
+        # 整行只有一个金额，是中国支付回执里的主金额行
+        if single and not line_is_discount and not is_balance(single) and PURE_AMOUNT_RE.match(trimmed):
+            score = 96 + (4 if index <= 2 else 0)
+            if pending:
+                inherited = (pending[1] + (6 if single["has_symbol"] else 0)
+                             + (3 if single["has_yuan"] else 0) + 4)
+                score = max(score, inherited)
+            candidates.append({"cents": single["cents"], "score": score, "source": line})
 
         for keyword, weight in AMOUNT_KEYWORDS:
             pos = clean.lower().find(keyword.lower())
             if pos < 0:
                 continue
             after = [t for t in tokens if t["start"] >= pos + len(keyword)] or [tokens[-1]]
-            score = weight - 120 if is_discount else weight
+            score = weight
+            if line_is_discount or is_balance(after[0]):
+                score -= 120
             if after[0]["has_symbol"]:
                 score += 6
             if after[0]["has_yuan"]:
                 score += 3
             candidates.append({"cents": after[0]["cents"], "score": score, "source": line})
 
-        if not is_discount:
-            sym = next((t for t in tokens if t["has_symbol"]), None)
+        if not line_is_discount:
+            sym = next((t for t in tokens if t["has_symbol"] and not is_balance(t)), None)
             if sym:
                 candidates.append({"cents": sym["cents"], "score": 30, "source": line})
+
+        pending = None
 
     if candidates:
         best = max(candidates, key=lambda c: c["score"])
@@ -249,9 +308,17 @@ def _is_cjk(ch: str) -> bool:
     return "\u4e00" <= ch <= "\u9fff"
 
 
+def _is_kana(ch: str) -> bool:
+    return "\u3040" <= ch <= "\u30ff"
+
+
 def clean_merchant(line: str) -> str:
     text = line
-    for prefix in ["商户名称", "商户全称", "收款方", "商户", "商家名称", "商家", "交易对方", "名称", "备注"]:
+    for prefix in [
+        "商户全称", "商户名称", "商户简称", "商家全称", "商家名称", "商家简称",
+        "收款方全称", "收款方名称", "收款单位", "收款账户", "交易对方",
+        "商户", "商家", "收款方", "名称", "备注",
+    ]:
         if text.startswith(prefix):
             text = text[len(prefix):]
     text = text.strip(" :：-—|·、,，")
@@ -277,18 +344,29 @@ def is_plausible_merchant(text: str) -> bool:
         return False
     if any(w in trimmed for w in SENTENCE_WORDS):
         return False
-    readable = sum(1 for ch in trimmed if ch.isalnum() or _is_cjk(ch))
+    if any(w in trimmed for w in PROMO_WORDS):
+        return False
+    if trimmed[0] in MASKED_PREFIXES:
+        return False
+    readable = sum(1 for ch in trimmed if ch.isalnum() or _is_cjk(ch) or _is_kana(ch))
     if readable / max(len(trimmed), 1) < 0.6:
         return False
     cjk = sum(1 for ch in trimmed if _is_cjk(ch))
-    return cjk >= 2 or contains_known_brand(trimmed)
+    kana = sum(1 for ch in trimmed if _is_kana(ch))
+    return cjk >= 2 or kana >= 2 or contains_known_brand(trimmed)
 
 
 def extract_merchant(lines, debug=False):
     notes = []
-    label_prefixes = ["商户名称", "商户全称", "交易对方", "收款方", "商家名称", "商户", "商家", "对方"]
+    # 长标签必须排在短标签前面，否则「商户简称」会被「商户」截断
+    label_prefixes = [
+        "商户全称", "商户名称", "商户简称", "收款方全称", "收款方名称", "收款单位", "收款账户",
+        "交易对方", "商家全称", "商家名称", "商家简称", "商户", "商家", "收款方", "对方",
+    ]
     for index, raw in enumerate(lines):
         line = raw.strip()
+        if line.startswith("收款方备注"):
+            continue
         for prefix in label_prefixes:
             if line.startswith(prefix):
                 value = line[len(prefix):].strip(" :：-—|·、,，")
@@ -308,6 +386,14 @@ def extract_merchant(lines, debug=False):
         name = clean_merchant(value)
         if is_plausible_merchant(name):
             notes.append("商户来源：备注")
+            return name, notes
+
+    # 个人转账：付款-给XXX / 转账给XXX
+    m = re.search(r"(?:付款|转账|收款)[-—－]?\s*给\s*([^，。、,;；\s]{1,20})", "\n".join(lines))
+    if m:
+        name = clean_merchant(m.group(1))
+        if is_plausible_merchant(name):
+            notes.append("商户来源：付款对象「给%s」" % name)
             return name, notes
 
     candidates = []
@@ -352,7 +438,8 @@ def extract_merchant(lines, debug=False):
             candidates.append((clean_merchant(line), score))
     if candidates:
         best = max(candidates, key=lambda c: c[1])
-        if best[0]:
+        # 分数太低说明没有任何正向证据，多半是页面说明文字
+        if best[0] and best[1] >= 1.5:
             notes.append("商户来源评分：%.1f" % best[1])
             return best[0], notes
     notes.append("未识别到商户名")
@@ -362,16 +449,25 @@ def extract_merchant(lines, debug=False):
 # ---------------------------------------------------------------- 方向 / 平台 / 单号 / 时间
 
 
+def strip_non_directional(text: str) -> str:
+    result = text
+    for phrase in NON_DIRECTIONAL_PHRASES:
+        result = result.replace(phrase, " ")
+    result = re.sub(r"预计[^，。\n]{0,10}到账", " ", result)
+    return result
+
+
 def detect_signed_kind(text: str):
     plus = minus = 0
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
-        if line[0] in "+＋" and re.search(r"^[+＋\-－]\s*[¥￥]?\s*\d", line):
-            plus += 1
-        elif line[0] in "-－" and re.search(r"^[+＋\-－]\s*[¥￥]?\s*\d", line):
-            minus += 1
+        if SIGNED_FULL_RE.match(line):
+            if line[0] in "+＋":
+                plus += 1
+            elif line[0] in "-－":
+                minus += 1
     if plus > 0 and minus == 0:
         return ("income", 0.90, "金额前缀为 + 号")
     if minus > 0 and plus == 0:
@@ -380,7 +476,7 @@ def detect_signed_kind(text: str):
 
 
 def detect_kind(text: str):
-    n = normalize(text)
+    n = normalize(strip_non_directional(text))
     income_hits = [k for k in INCOME_KEYWORDS if normalize(k) in n]
     expense_hits = [k for k in EXPENSE_KEYWORDS if normalize(k) in n]
 
@@ -714,6 +810,176 @@ def _(r):
         ("金额(分)", r["amount"], 9600),
         ("收支方向", r["kind"], "expense"),
         ("商户含「意民」", "意民" in r["merchant"], True),
+    ]
+
+
+# ---------------------------------------------------------------- 第二批真机截图
+
+ALIPAY_24 = """12:51
+支付成功
+回首页
+¥24.00
+*锶锶  ¥24.00
+付款方式 支付宝小荷包(小红车)
+支付宝积分+2 体验金+18 一键领
+支付有礼
+获得最高5元碰一下支付红包
+立即领
+丸美 小红笔眼霜4.0
+到手超4支眼霜量 再送生日周边
+立即购买
+完成"""
+
+
+@case("截图·支付宝24元（营销文案里有「5元」）", ALIPAY_24)
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 2400),
+        ("收支方向", r["kind"], "expense"),
+        ("平台", r["platform"], "alipay"),
+        ("商户为空", r["merchant"], ""),
+    ]
+
+
+@case("截图·微信扫码付款给个人", """22:28
+账单
+扫二维码付款-给みや、
+-130.00
+当前状态 支付成功
+收款方备注 二维码收款
+支付方式 零钱通
+转账时间 2026年8月12日 22:11:14
+转账单号
+10001073012026081200412311519112
+对订单有疑惑 发起群收款
+申请电子凭证""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 13000),
+        ("收支方向", r["kind"], "expense"),
+        ("商户为收款人", r["merchant"], "みや"),
+        ("平台", r["platform"], "wechat"),
+        ("取转账时间", r["date"], (2026, 8, 12, 22)),
+    ]
+
+
+@case("截图·淘宝账单 705（商户简称）", """21:10
+淘宝平台商户
+-705.00
+当前状态 支付成功
+支付时间 2025年10月2日 18:23:50
+商户简称 淘宝平台商户
+收单机构 财付通支付科技有限公司
+支付方式 工商银行储蓄卡(0092)
+由网联清算有限公司提供付款清算服务
+交易单号 4440302262202510028845408022
+商户单号 11180600725100219797815313210""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 70500),
+        ("商户", r["merchant"], "淘宝平台商户"),
+        ("取支付时间", r["date"], (2025, 10, 2, 18)),
+    ]
+
+
+@case("截图·转账成功 50 万（收款账户不是收入信号）", """完成
+转账成功
+预计10秒内到账，实际时间取决于收款银行。
+转账金额 500,000.00元
+收款账户 苏州悦贵房地产开发有限公司""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 50000000),
+        ("收支方向", r["kind"], "expense"),
+        ("商户", r["merchant"], "苏州悦贵房地产开发有限公司"),
+    ]
+
+
+@case("截图·抖音电商 16434.42（订单金额更大）", """16:39
+账单详情
+抖音电商商家
+-16,434.42
+交易成功
+订单金额 16435.00
+花呗立减 -0.58
+支付时间 2026-07-05 16:30:23
+付款方式 余额宝 11,434.42
+花呗 5,000.00
+组合支付
+商品说明 抖音电商-订单编号
+支付奖励 立即领取50积分
+收款方全称 上海格物致品网络科技有限公司""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 1643442),
+        ("收支方向", r["kind"], "expense"),
+        ("商户", r["merchant"], "上海格物致品网络科技有限公司"),
+    ]
+
+
+@case("截图·抖音支付 487.20（还款金额 500 更大）", """08:17
+支付成功
+已提交银行处理
+¥487.20
+立减优惠 -¥12.80
+还款进度 银行处理中，预计今天到账
+还款金额 ¥500.00
+更多信息
+抖音支付 笔笔返现10%
+最高1.8元生活缴费券
+2元抖音打车券
++6抖音支付积分
+完成""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 48720),
+        ("收支方向", r["kind"], "expense"),
+        ("商户为空", r["merchant"], ""),
+    ]
+
+
+@case("截图·深圳通 6.99（订单金额 7.00 更大）", """账单详情
+深圳通
+-6.99
+自动付款成功
+订单金额 ¥7.00
+抖音支付立减 ¥0.01
+付款方式 抖音支付(工行信用卡4735)
+抽中奖品 得0.01元红包，点击查看
+商品说明 抖音乘车码乘车-地铁2026-07-27 16:17:24
+支付时间 2026-07-27 17:27:24
+商户全称 深圳市深圳通有限公司""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 699),
+        ("收支方向", r["kind"], "expense"),
+        ("商户", r["merchant"], "深圳市深圳通有限公司"),
+        ("取支付时间", r["date"], (2026, 7, 27, 17)),
+    ]
+
+
+@case("格式·实付与金额分两行", """支付成功
+肯德基
+订单金额
+¥45.00
+优惠
+-¥9.00
+实付
+¥36.00""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 3600),
+        ("商户", r["merchant"], "肯德基"),
+    ]
+
+
+@case("格式·银行短信（余额与消费金额同一行）",
+      "您尾号1234的储蓄卡10月23日14:22消费人民币58.00元，余额1,204.20元。【招商银行】")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 5800),
+        ("收支方向", r["kind"], "expense"),
+        ("平台", r["platform"], "bankCard"),
     ]
 
 
