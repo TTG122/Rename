@@ -208,22 +208,27 @@ final class MonthlyReportTests: XCTestCase {
         }
     }
 
-    private func makeTransaction(daysAgo: Int, amount: Int, category: String, merchant: String, kind: TransactionKind = .expense) -> Transaction {
-        Transaction(
+    /// 用「本月第 N 天」构造时间，而不是「N 天前」。
+    /// 后者在每月 1~4 号跑测试时会掉到上个月，月报就统计不到，属于测试自身的 bug。
+    private func makeTransaction(dayOfMonth: Int, amount: Int, category: String, merchant: String, kind: TransactionKind = .expense) -> Transaction {
+        let calendar = Calendar.current
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: .now)) ?? .now
+        let occurredAt = calendar.date(byAdding: .day, value: dayOfMonth - 1, to: startOfMonth) ?? startOfMonth
+        return Transaction(
             kind: kind,
             amountCents: amount,
             merchant: merchant,
             categoryName: category,
-            occurredAt: Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now) ?? .now
+            occurredAt: occurredAt
         )
     }
 
     func testTotalsAndBreakdown() {
         let transactions = [
-            makeTransaction(daysAgo: 1, amount: 3600, category: "吃饭", merchant: "星巴克"),
-            makeTransaction(daysAgo: 2, amount: 6400, category: "吃饭", merchant: "海底捞"),
-            makeTransaction(daysAgo: 3, amount: 30_000, category: "加油", merchant: "中石化"),
-            makeTransaction(daysAgo: 4, amount: 1_200_000, category: "工资收入", merchant: "公司", kind: .income)
+            makeTransaction(dayOfMonth: 1, amount: 3600, category: "吃饭", merchant: "星巴克"),
+            makeTransaction(dayOfMonth: 2, amount: 6400, category: "吃饭", merchant: "海底捞"),
+            makeTransaction(dayOfMonth: 3, amount: 30_000, category: "加油", merchant: "中石化"),
+            makeTransaction(dayOfMonth: 4, amount: 1_200_000, category: "工资收入", merchant: "公司", kind: .income)
         ]
 
         let report = MonthlyReportBuilder.build(
@@ -255,10 +260,10 @@ final class MonthlyReportTests: XCTestCase {
 
     func testAnomalyDetection() {
         let transactions = [
-            makeTransaction(daysAgo: 1, amount: 2000, category: "购物", merchant: "A"),
-            makeTransaction(daysAgo: 2, amount: 2100, category: "购物", merchant: "B"),
-            makeTransaction(daysAgo: 3, amount: 2200, category: "购物", merchant: "C"),
-            makeTransaction(daysAgo: 4, amount: 900_00, category: "购物", merchant: "D")
+            makeTransaction(dayOfMonth: 1, amount: 2000, category: "购物", merchant: "A"),
+            makeTransaction(dayOfMonth: 2, amount: 2100, category: "购物", merchant: "B"),
+            makeTransaction(dayOfMonth: 3, amount: 2200, category: "购物", merchant: "C"),
+            makeTransaction(dayOfMonth: 4, amount: 900_00, category: "购物", merchant: "D")
         ]
         let report = MonthlyReportBuilder.build(
             month: .now,
