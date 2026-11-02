@@ -102,4 +102,26 @@ enum DateText {
     static func sectionTitle(for date: Date) -> String {
         dayTitle(for: date) + " · " + timeFormatter.string(from: date)
     }
+
+    static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M-d HH:mm"
+        return f
+    }()
+
+    /// 列表右侧的时间戳：今天只显示时分，非今天带上日期。
+    /// 只显示「09:15」会让上个月的记录看起来像今天的，用户会以为账没记上。
+    static func listStamp(for date: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDateInToday(date) {
+            return timeFormatter.string(from: date)
+        }
+        if calendar.component(.year, from: date) == calendar.component(.year, from: .now) {
+            return monthDayFormatter.string(from: date)
+        }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy-M-d"
+        return f.string(from: date)
+    }
 }

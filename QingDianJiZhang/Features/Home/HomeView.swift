@@ -53,6 +53,17 @@ struct HomeView: View {
             .amountCents ?? 0
     }
 
+    /// 分类占比为空时的提示：区分「本月没记账」和「账记在上个月」
+    private var monthEmptyHint: String {
+        guard let latest = activeTransactions.first else {
+            return "双击手机背面记第一笔吧"
+        }
+        if latest.occurredAt >= monthStart {
+            return "本月只记了收入，支出会在这里统计"
+        }
+        return "最近的记录在 \(MonthKey.displayTitle(for: latest.occurredAt))，去账单页能看到"
+    }
+
     private var categorySlices: [CategoryStat] {
         var grouped: [String: Int] = [:]
         for item in monthItems where item.kind == .expense {
@@ -335,7 +346,7 @@ struct HomeView: View {
             }
 
             if categorySlices.isEmpty {
-                EmptyStateView(symbol: "chart.pie", title: "还没有支出数据", message: "双击手机背面记第一笔吧")
+                EmptyStateView(symbol: "chart.pie", title: "本月还没有支出", message: monthEmptyHint)
             } else {
                 HStack(spacing: 18) {
                     Chart(categorySlices.prefix(5), id: \.name) { slice in

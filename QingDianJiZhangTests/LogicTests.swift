@@ -292,3 +292,24 @@ final class MoneyFormatterTests: XCTestCase {
         XCTAssertEqual(MoneyFormatter.compact(cents: 1_200_000), "1.2万")
     }
 }
+
+// MARK: - 列表时间戳
+
+final class DateTextTests: XCTestCase {
+
+    /// 今天的记录只显示时分，其它日期必须带上月份，
+    /// 否则上个月的记录看起来像今天的，用户会以为账没记上。
+    func testListStampShowsDateForPastRecords() {
+        let calendar = Calendar.current
+        let now = Date.now
+        let todayStamp = DateText.listStamp(for: now)
+        XCTAssertEqual(todayStamp.count, 5, "今天应只显示 HH:mm，实际：\(todayStamp)")
+
+        guard let lastMonth = calendar.date(byAdding: .month, value: -1, to: now) else {
+            return XCTFail("构造日期失败")
+        }
+        let pastStamp = DateText.listStamp(for: lastMonth)
+        XCTAssertTrue(pastStamp.contains("-"), "非今天应带日期，实际：\(pastStamp)")
+        XCTAssertGreaterThan(pastStamp.count, 5)
+    }
+}

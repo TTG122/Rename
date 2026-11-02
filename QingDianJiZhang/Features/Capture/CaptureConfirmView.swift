@@ -265,6 +265,23 @@ struct CaptureConfirmView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(Theme.textTertiary)
                     }
+                    // 识别异常时，OCR 原文是唯一能定位问题的证据。
+                    // 之前只有解析备注，看不出「金额是从哪一行取出来的」。
+                    if !draft.rawText.isEmpty {
+                        DisclosureGroup {
+                            Text(draft.rawText)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Theme.textTertiary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 4)
+                        } label: {
+                            Text("识别原文（截图后看不清就发这个）")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.brand)
+                        }
+                        .padding(.top, 2)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)

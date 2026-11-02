@@ -37,7 +37,7 @@ struct TransactionRow: View {
                 Text(transaction.signedAmountText)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(transaction.kind.tint)
-                Text(DateText.timeFormatter.string(from: transaction.occurredAt))
+                Text(DateText.listStamp(for: transaction.occurredAt))
                     .font(.system(size: 10))
                     .foregroundStyle(Theme.textTertiary)
             }

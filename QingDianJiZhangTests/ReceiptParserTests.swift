@@ -374,4 +374,53 @@ final class ReceiptParserTests: XCTestCase {
         XCTAssertEqual(result.kind, .expense)
         XCTAssertEqual(result.platform, .bankCard)
     }
+
+    // MARK: - 回归：真机截图（1.1.4）
+
+    /// 微信账单页的负号是排版符号 U+2212，不是键盘上的 `-`。
+    /// 旧逻辑认不出「−50.00」，金额退化到从「储蓄卡(6354)」取卡号尾号。
+    func testTypographicMinusIsUnderstood() {
+        let text = """
+        14:16
+        账单
+        扫二维码付款-给文文
+        \u{2212}50.00
+        当前状态 支付成功
+        收款方备注 二维码收款
+        支付方式 浦发银行储蓄卡(6354)
+        转账时间 2026年10月26日 11:47:22
+        转账单号 10001073012026102601523144247524
+        账单服务
+        收款方服务
+        收款方名片
+        本服务由财付通提供
+        """
+        let result = ReceiptParser.parse(text: text)
+        XCTAssertEqual(result.amountCents, 5000, "「−50.00」必须识别成 50 元")
+        XCTAssertEqual(result.kind, .expense)
+        XCTAssertEqual(result.merchant, "文文", "商户应是收款人，不是「服务」，实际：\(result.merchant)")
+        XCTAssertEqual(result.platform, .wechat, "财付通即微信支付")
+    }
+
+    /// 卡号尾号不能当金额：金额识别失败时宁可留空，也不要记成 6354 元
+    func testCardTailIsNotAmount() {
+        let result = ReceiptParser.parse(text: """
+        支付成功
+        某商户
+        支付方式 招商银行储蓄卡(6354)
+        完成
+        """)
+        XCTAssertNil(result.amountCents, "储蓄卡(6354) 里的是卡尾号，不是金额")
+    }
+
+    /// 全角数字 / 全角负号也要能解析
+    func testFullWidthAmount() {
+        let result = ReceiptParser.parse(text: """
+        支付成功
+        便利店
+        －５０．００
+        微信支付
+        """)
+        XCTAssertEqual(result.amountCents, 5000)
+    }
 }

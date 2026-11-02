@@ -72,7 +72,9 @@ enum ReceiptParser {
         // 钱包流水页的标签词，OCR 后常常单独成行，容易被误判成商户
         "类型", "状态", "说明", "明细", "零钱明细", "交易详情", "退款详情", "账单详情", "全部账单",
         // 「收款方备注 / 收款方名片」这类字段的值是备注或入口名，不是商户
-        "名片", "二维码收款", "二维码", "收款账户"
+        "名片", "二维码收款", "二维码", "收款账户",
+        // 微信账单页底部的分区标题：「账单服务」「收款方服务」「申请电子凭证」
+        "服务", "账单服务", "收款方服务", "收款方名片", "电子凭证", "群收款", "本服务"
     ]
 
     /// 页面上的营销 / 广告文案行，永远不可能是商户名
@@ -107,6 +109,11 @@ enum ReceiptParser {
 
     static func parse(lines: [String], now: Date = .now) -> ParsedReceipt {
         var result = ParsedReceipt()
+
+        // 先把 OCR 里的排版符号归一化：微信账单页的「−50.00」用的是 U+2212 减号，
+        // 不是键盘上的 -。不归一化的话「整行金额」的正则全部失配，
+        // 金额会退化到从「储蓄卡(6354)」里取卡号尾号，直接记成错账。
+        let lines = lines.map(normalizeSymbols)
 
         // 一张截图里可能出现两笔以上的记录（相册预览、连拍、聊天记录里的多张截图）。
         // 这时只能取最上面那一笔——否则会出现「金额取第一笔、方向取第二笔」的错账。
@@ -161,6 +168,38 @@ enum ReceiptParser {
     }
 
     // MARK: - 多笔切分
+
+    /// OCR 文本里的排版符号 → 键盘符号。
+    /// 「−50.00」的减号是 U+2212，「５０」是全角数字，「50，000」是全角逗号，
+    /// 这些都会让金额正则失配，必须先统一。
+    private static func normalizeSymbols(_ text: String) -> String {
+        var result = text
+        let replacements: [(String, String)] = [
+            ("\u{2212}", "-"),   // MINUS SIGN
+            ("\u{2013}", "-"),   // EN DASH
+            ("\u{2014}", "-"),   // EM DASH
+            ("\u{FF0D}", "-"),   // 全角 －
+            ("\u{FE63}", "-"),   // 小写减号
+            ("\u{FF0B}", "+"),   // 全角 ＋
+            ("\u{FF0E}", "."),   // 全角 ．
+            ("\u{FF0C}", ",")    // 全角 ，
+        ]
+        for (from, to) in replacements {
+            if result.contains(from) {
+                result = result.replacingOccurrences(of: from, with: to)
+            }
+        }
+        let fullwidthDigits = "０１２３４５６７８９"
+        if result.unicodeScalars.contains(where: { (0xFF10...0xFF19).contains($0.value) }) {
+            for (offset, character) in fullwidthDigits.enumerated() {
+                let full = String(character)
+                if result.contains(full) {
+                    result = result.replacingOccurrences(of: full, with: String(offset))
+                }
+            }
+        }
+        return result
+    }
 
     /// 每笔记录的「标题行」：支付成功 / 转账成功 / 你已收款……
     private static let blockTitleKeywords = [
@@ -360,6 +399,13 @@ enum ReceiptParser {
                 continue
             }
 
+            // 「浦发银行储蓄卡(6354)」「尾号 1234」里的数字是卡号尾号，不是金额。
+            // 这一条很关键：金额没被识别出来时，这些行会成为最高权重候选，直接记成错账。
+            guard !looksLikeCardDisplay(clean) else {
+                notes.append("跳过银行卡行：\(line)")
+                continue
+            }
+
             let tokens = amountTokens(in: clean)
 
             // 「实付」「订单金额」单独占一行时先把权重记下来，下一行的金额继承它
@@ -465,6 +511,18 @@ enum ReceiptParser {
         if previousLineIsLabel { return true }
         guard let range = balanceRange else { return false }
         return token.range.lowerBound >= range.lowerBound
+    }
+
+    /// 「储蓄卡(6354)」这类卡号展示：括号里的四位是卡尾号，不是金额。
+    /// 但银行短信「您尾号1234的储蓄卡…消费58.00元」是完整通知，不能整行丢掉，
+    /// 所以只有「尾号」且没有金额线索时才判定为卡号展示。
+    private static func looksLikeCardDisplay(_ text: String) -> Bool {
+        if RegexHelper.contains(#"[（(]\d{4}[)）]"#, in: text) { return true }
+        if text.contains("尾号") {
+            let amountHints = ["元", "消费", "支付", "金额", "扣款", "转出", "收入"]
+            return !amountHints.contains { text.contains($0) }
+        }
+        return false
     }
 
     /// 单号 / 流水号 / 12 位以上长数字：不可能是金额
@@ -761,6 +819,10 @@ enum ReceiptParser {
     private static func detectPlatform(in text: String) -> PaymentPlatform {
         let lowered = TextNormalizer.normalize(text)
         if lowered.contains("微信支付") || lowered.contains("wxpay") || lowered.contains("微信") && lowered.contains("支付") {
+            return .wechat
+        }
+        // 财付通是微信支付的清算渠道，账单页底部常写「本服务由财付通提供」
+        if lowered.contains("财付通") {
             return .wechat
         }
         // 「零钱」是微信独有的说法（支付宝叫余额宝 / 余额）

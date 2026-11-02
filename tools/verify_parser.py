@@ -39,6 +39,26 @@ def blank_out(pattern: str, text: str) -> str:
     return re.sub(pattern, " ", text, flags=re.I)
 
 
+# OCR 里的排版符号 → 键盘符号（「−50.00」的减号是 U+2212，不是 -）
+SYMBOL_MAP = {
+    "\u2212": "-", "\u2013": "-", "\u2014": "-", "\uff0d": "-", "\ufe63": "-",
+    "\uff0b": "+", "\uff0e": ".", "\uff0c": ",",
+}
+FULLWIDTH_DIGITS = "０１２３４５６７８９"
+
+
+def normalize_symbols(text: str) -> str:
+    out = text
+    for src, dst in SYMBOL_MAP.items():
+        if src in out:
+            out = out.replace(src, dst)
+    if any("\uff10" <= ch <= "\uff19" for ch in out):
+        for index, ch in enumerate(FULLWIDTH_DIGITS):
+            if ch in out:
+                out = out.replace(ch, str(index))
+    return out
+
+
 def cleaned(line: str) -> str:
     text = line
     text = blank_out(r"\d{4}\s*[-/年.]\s*\d{1,2}\s*[-/月.]\s*\d{1,2}\s*日?", text)
@@ -89,6 +109,7 @@ MERCHANT_BLACKLIST = [
     "积分", "余额", "零钱", "钱包", "收款方", "付款方", "转账", "银行",
     "类型", "状态", "说明", "明细", "零钱明细", "交易详情", "退款详情", "账单详情", "全部账单",
     "名片", "二维码收款", "二维码", "收款账户",
+    "服务", "账单服务", "收款方服务", "收款方名片", "电子凭证", "群收款", "本服务",
 ]
 
 PROMO_WORDS = [
@@ -184,6 +205,15 @@ def amount_tokens(text: str):
     return out
 
 
+def looks_like_card_display(text: str) -> bool:
+    """「储蓄卡(6354)」是卡号展示；但银行短信「尾号1234…消费58.00元」是完整通知。"""
+    if re.search(r"[（(]\d{4}[)）]", text):
+        return True
+    if "尾号" in text:
+        return not any(h in text for h in ["元", "消费", "支付", "金额", "扣款", "转出", "收入"])
+    return False
+
+
 def looks_like_order_number(text: str) -> bool:
     """只看连续数字的最长一段：银行短信里多个金额拼起来超过 12 位，但不是单号。"""
     runs = [len(m) for m in re.findall(r"\d+", text)]
@@ -213,6 +243,9 @@ def extract_amount(lines):
             continue
         if looks_like_order_number(clean):
             notes.append("跳过疑似单号行：" + line)
+            continue
+        if looks_like_card_display(clean):
+            notes.append("跳过银行卡行：" + line)
             continue
         tokens = amount_tokens(clean)
         if not tokens:
@@ -498,6 +531,9 @@ def detect_platform(text: str) -> str:
     n = normalize(text)
     if "微信支付" in n or "wxpay" in n or ("微信" in n and "支付" in n):
         return "wechat"
+    # 财付通是微信支付的清算渠道，账单页底部常有「本服务由财付通提供」
+    if "财付通" in n:
+        return "wechat"
     # 「零钱」是微信独有的说法（支付宝叫余额宝 / 余额）
     if "零钱" in n:
         return "wechat"
@@ -599,7 +635,7 @@ def overall_confidence(r) -> float:
 
 
 def parse(text: str):
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = [normalize_symbols(l.strip()) for l in text.splitlines() if l.strip()]
 
     blocks = split_blocks(lines)
     # 只有真正带金额的块才算一笔，避免 OCR 把标题重复一行就误判成两笔
@@ -980,6 +1016,56 @@ def _(r):
         ("金额(分)", r["amount"], 5800),
         ("收支方向", r["kind"], "expense"),
         ("平台", r["platform"], "bankCard"),
+    ]
+
+
+# ---------------------------------------------------------------- 第三批真机截图（1.1.4）
+
+# 微信账单页的负号是排版用的 U+2212，不是键盘上的 -
+QR_PAY_50 = """14:16
+账单
+扫二维码付款-给文文
+\u221250.00
+当前状态 支付成功
+收款方备注 二维码收款
+支付方式 浦发银行储蓄卡(6354)
+转账时间 2026年10月26日 11:47:22
+转账单号 10001073012026102601523144247524
+账单服务
+对订单有疑惑 发起群收款
+申请电子凭证
+收款方服务
+收款方名片
+本服务由财付通提供"""
+
+
+@case("截图·扫码付款 50 元（U+2212 负号）", QR_PAY_50)
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 5000),
+        ("收支方向", r["kind"], "expense"),
+        ("商户为收款人", r["merchant"], "文文"),
+        ("平台", r["platform"], "wechat"),
+        ("取转账时间", r["date"], (2026, 10, 26, 11)),
+    ]
+
+
+@case("截图·卡号尾号不能当金额", """支付成功
+某商户
+支付方式 招商银行储蓄卡(6354)
+完成""")
+def _(r):
+    return [("金额(分)", r["amount"], None)]
+
+
+@case("格式·全角数字金额", """支付成功
+便利店
+－５０．００
+微信支付""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 5000),
+        ("收支方向", r["kind"], "expense"),
     ]
 
 
