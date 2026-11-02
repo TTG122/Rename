@@ -287,8 +287,11 @@ def extract_amount(lines):
         if single and not line_is_discount and not is_balance(single) and SIGNED_LINE_RE.match(trimmed):
             candidates.append({"cents": single["cents"], "score": 98, "source": line})
 
-        # 整行只有一个金额，是中国支付回执里的主金额行
-        if single and not line_is_discount and not is_balance(single) and PURE_AMOUNT_RE.match(trimmed):
+        # 整行只有一个金额，是中国支付回执里的主金额行；
+        # 但必须带小数 / 货币符号 / 「元」，否则状态栏电量「4」「72」这类纯整数
+        # 会被当成金额（而且因为在页面顶部还会多拿 4 分），压过真正的金额。
+        has_evidence = bool(single) and (single["has_symbol"] or single["has_yuan"] or single["has_frac"])
+        if single and not line_is_discount and not is_balance(single) and has_evidence and PURE_AMOUNT_RE.match(trimmed):
             score = 96 + (4 if index <= 2 else 0)
             if pending:
                 inherited = (pending[1] + (6 if single["has_symbol"] else 0)
@@ -1067,6 +1070,50 @@ def _(r):
         ("金额(分)", r["amount"], 5000),
         ("收支方向", r["kind"], "expense"),
     ]
+
+
+# 状态栏的电量/信号也会被 OCR 当正文读出来，且因为位于页面顶部还会多拿「顶部加分」
+@case("截图·状态栏电量 72 不能当金额", """14:16N
+72
+账单
+扫二维码付款-给文文
+-50.00
+支付成功
+当前状态
+二维码收款
+收款方备注
+支付方式
+浦发银行储蓄卡（6354）
+2026年10月26日11:47:22
+转账时间
+转账单号
+10001073012026102601523144247524
+账单服务
+收款方服务
+本服务由财付通提供""")
+def _(r):
+    return [
+        ("金额(分)", r["amount"], 5000),
+        ("商户为收款人", r["merchant"], "文文"),
+    ]
+
+
+@case("截图·状态栏数字 4 不能当金额（用户实际）", """14:16
+4
+账单
+扫二维码付款-给文文
+-50.00
+当前状态 支付成功
+支付方式 浦发银行储蓄卡（6354）""")
+def _(r):
+    return [("金额(分)", r["amount"], 5000)]
+
+
+@case("回归·纯整数无符号不当金额", """支付成功
+72
+完成""")
+def _(r):
+    return [("金额(分)", r["amount"], None)]
 
 
 def main():

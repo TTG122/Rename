@@ -25,7 +25,7 @@
 - [x] Bundle ID 前缀一致（`.app` / `.share` / `.widget`）
 - [x] 主 App 添加了 **App Groups** → `group.com.qingdianjizhang.app`（三个 target 都要勾）
 - [x] 主 App 添加了 **iCloud** → CloudKit → 容器 `iCloud.com.qingdianjizhang.app`
-- [x] 版本号 `MARKETING_VERSION = 1.1.4`、`CURRENT_PROJECT_VERSION = 8`
+- [x] 版本号 `MARKETING_VERSION = 1.1.5`、`CURRENT_PROJECT_VERSION = 9`
 
 ### 1.3 隐私清单与权限文案
 

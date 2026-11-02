@@ -423,4 +423,28 @@ final class ReceiptParserTests: XCTestCase {
         """)
         XCTAssertEqual(result.amountCents, 5000)
     }
+
+    /// 状态栏的电量/信号会被 OCR 当正文读出来，而且因为在页面顶部还能拿到「顶部加分」，
+    /// 权重正好压过真正的金额。用户实测：50 元被记成 4 元，就是状态栏那个「4」干的。
+    func testStatusBarNumbersAreIgnored() {
+        let result = ReceiptParser.parse(text: """
+        14:16
+        4
+        账单
+        扫二维码付款-给文文
+        -50.00
+        当前状态 支付成功
+        支付方式 浦发银行储蓄卡（6354）
+        收款方服务
+        """)
+        XCTAssertEqual(result.amountCents, 5000, "状态栏的 4 不能当金额")
+        XCTAssertEqual(result.merchant, "文文")
+        XCTAssertNotEqual(result.item, "-50.00", "金额那一行不该被塞进「内容」")
+    }
+
+    /// 纯整数、不带小数/符号/元的行不是金额
+    func testBareIntegerIsNotAmount() {
+        let result = ReceiptParser.parse(text: "支付成功\n72\n完成")
+        XCTAssertNil(result.amountCents)
+    }
 }

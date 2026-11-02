@@ -446,8 +446,15 @@ enum ReceiptParser {
             }
 
             // 整行只有一个金额：这是中国支付回执里最核心的那一行（大字号主金额），
-            // 权重必须高于「订单金额」「还款金额」「商品金额」这类说明字段
-            if let token = singleToken, !lineIsDiscount, !isBalance(token),
+            // 权重必须高于「订单金额」「还款金额」「商品金额」这类说明字段。
+            // 但必须带「小数 / 货币符号 / 元」——否则状态栏的电量「4」「72」、
+            // 信号格数、页码都会被当成整行金额，而且因为在页面顶部还会多拿 4 分，
+            // 正好压过真正的金额（这就是 50 元被记成 4 元的原因）。
+            let hasAmountEvidence: Bool = {
+                guard let token = singleToken else { return false }
+                return token.hasSymbol || token.hasYuanSuffix || token.hasFraction
+            }()
+            if let token = singleToken, !lineIsDiscount, !isBalance(token), hasAmountEvidence,
                RegexHelper.contains(pureAmountPattern, in: trimmed) {
                 var score = 96
                 if index <= 2 { score += 4 }
@@ -731,7 +738,10 @@ enum ReceiptParser {
             let next = lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
             let lowered = TextNormalizer.normalize(next)
             let blocked = merchantBlacklist.contains { lowered.contains(TextNormalizer.normalize($0)) }
-            if !blocked, next.count >= 2, next.count <= 30, !next.contains("¥") {
+            // 紧跟在收款人下面那一行通常就是金额，别把它塞进「内容」里
+            let isAmountOnly = RegexHelper.contains(#"^[+＋\-－]?\s*[¥￥]?\s*[\d,]+(?:\.\d{1,2})?\s*(?:元|块)?$"#,
+                                                    in: next)
+            if !blocked, !isAmountOnly, next.count >= 2, next.count <= 30, !next.contains("¥") {
                 return next
             }
         }
