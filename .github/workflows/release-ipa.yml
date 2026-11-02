@@ -95,6 +95,16 @@ jobs:
           ls -lh "$DST"
           echo "path=$DST" >> "$GITHUB_OUTPUT"
 
+      # 先无条件上传 Artifact：万一下一步建 Release 因为仓库权限被拒，
+      # 你仍然能在这里把 IPA 下载下来（Artifact 需要登录，Release 不需要）。
+      - name: Upload IPA as artifact (fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-${{ steps.meta.outputs.version }}
+          path: ${{ steps.asset.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
