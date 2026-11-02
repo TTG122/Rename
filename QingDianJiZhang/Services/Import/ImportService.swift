@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import CoreFoundation
 
 enum ImportError: LocalizedError {
     case unsupportedFile

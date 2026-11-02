@@ -9,6 +9,7 @@
 import SwiftUI
 import SwiftData
 import Charts
+import UIKit
 
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
