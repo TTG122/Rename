@@ -10,7 +10,13 @@
 import XCTest
 @testable import QingDianJiZhang
 
-final class ImportServiceTests: XCTestCase {
+/// ObjC 运行时里有个 `Category`（objc_category），会和我们的 SwiftData 模型撞名，
+/// 这里显式指向 App 里的那个类型。
+private typealias Category = QingDianJiZhang.Category
+
+/// 账单文件导入（xlsx / CSV）的回归测试。
+/// 注意：LogicTests.swift 里已经有一个基础的 `ImportServiceTests`，这里换名字避免重复声明。
+final class BillImportTests: XCTestCase {
 
     /// 测试用分类：与 App 首次启动时写入的系统分类一致
     private var categories: [Category] {

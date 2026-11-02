@@ -6,6 +6,9 @@
 import XCTest
 @testable import QingDianJiZhang
 
+/// ObjC 运行时里有个 `Category`（objc_category），会和我们的 SwiftData 模型撞名
+private typealias Category = QingDianJiZhang.Category
+
 // MARK: - 查重
 
 final class DuplicateDetectorTests: XCTestCase {

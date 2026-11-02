@@ -1,0 +1,189 @@
+{
+  "total_count": 2,
+  "jobs": [
+    {
+      "id": 125110095205,
+      "run_id": 41393613196,
+      "workflow_name": "Test",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/TTG122/Rename/actions/runs/41393613196",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOVfkVJM8AAAAdISSNZQ",
+      "head_sha": "7011ef9453ca862375c5a5d96c74b65e658f77ab",
+      "url": "https://api.github.com/repos/TTG122/Rename/actions/jobs/125110095205",
+      "html_url": "https://github.com/TTG122/Rename/actions/runs/41393613196/job/125110095205",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-02T05:22:08Z",
+      "started_at": "2026-11-02T05:22:11Z",
+      "completed_at": "2026-11-02T05:24:07Z",
+      "name": "XCTest（真机同款 Swift 代码）",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-02T05:22:12Z",
+          "completed_at": "2026-11-02T05:22:13Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-02T05:22:13Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        },
+        {
+          "name": "Normalize repo layout",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-02T05:22:15Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        },
+        {
+          "name": "Select latest stable Xcode",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-02T05:22:15Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        },
+        {
+          "name": "Show toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-02T05:22:15Z",
+          "completed_at": "2026-11-02T05:23:15Z"
+        },
+        {
+          "name": "Run unit tests",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 6,
+          "started_at": "2026-11-02T05:23:15Z",
+          "completed_at": "2026-11-02T05:24:02Z"
+        },
+        {
+          "name": "Upload xcresult on failure",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-02T05:24:02Z",
+          "completed_at": "2026-11-02T05:24:03Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-02T05:24:03Z",
+          "completed_at": "2026-11-02T05:24:04Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-02T05:24:04Z",
+          "completed_at": "2026-11-02T05:24:06Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/TTG122/Rename/check-runs/125110095205",
+      "labels": [
+        "macos-15"
+      ],
+      "runner_id": 1000000008,
+      "runner_name": "GitHub Actions 1000000008",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 125110095474,
+      "run_id": 41393613196,
+      "workflow_name": "Test",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/TTG122/Rename/actions/runs/41393613196",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOVfkVJM8AAAAdISSOcg",
+      "head_sha": "7011ef9453ca862375c5a5d96c74b65e658f77ab",
+      "url": "https://api.github.com/repos/TTG122/Rename/actions/jobs/125110095474",
+      "html_url": "https://github.com/TTG122/Rename/actions/runs/41393613196/job/125110095474",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-02T05:22:09Z",
+      "started_at": "2026-11-02T05:22:11Z",
+      "completed_at": "2026-11-02T05:22:18Z",
+      "name": "解析规则（Python 等价验证）",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-02T05:22:12Z",
+          "completed_at": "2026-11-02T05:22:13Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-02T05:22:13Z",
+          "completed_at": "2026-11-02T05:22:14Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-02T05:22:14Z",
+          "completed_at": "2026-11-02T05:22:14Z"
+        },
+        {
+          "name": "Run verifier",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-02T05:22:14Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-02T05:22:15Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-02T05:22:15Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-02T05:22:15Z",
+          "completed_at": "2026-11-02T05:22:15Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/TTG122/Rename/check-runs/125110095474",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000009,
+      "runner_name": "GitHub Actions 1000000009",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}
